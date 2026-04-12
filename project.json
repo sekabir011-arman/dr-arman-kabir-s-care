@@ -1,0 +1,38 @@
+{
+  "overview": "Dr. Arman Kabir's Care is a comprehensive bilingual (English/Bangla) patient management and doctor portal for clinics. It features hybrid cloud+offline storage, a central clinical data engine, smart clinical intelligence alerts (sepsis, AKI, drug safety), an actionable doctor decision dashboard, ward round mode, full audit trail, multi-device sync, AI-powered summaries, bed management, and a complete patient portal — all backed by an Internet Computer canister with offline-first PWA support.",
+  "features": [
+    "Hybrid cloud + offline-first storage with auto-migration from localStorage",
+    "Central clinical data engine (Patient, Encounter, Observation, Orders, Results, Notes)",
+    "Smart clinical intelligence: sepsis alert, AKI alert, hypotension/hypoxia detection",
+    "Doctor decision dashboard with red/yellow/green actionable panels",
+    "Ward round mode with swipe navigation and quick-action buttons",
+    "Full audit trail: before/after values, who/when, visible to Admin + Consultant Doctor",
+    "Fine-grained role permissions (Consultant, MO, Intern, Nurse, Staff)",
+    "Patient portal with restricted own-profile view, complaints log, drug reminders",
+    "Multi-device sync across all 4 roles",
+    "Bilingual English/Bangla UI with auto-translate for patient-facing content",
+    "Prescription & EMR with clinical summary auto-populated from visit",
+    "Drug safety: interactions, allergy alerts, renal dose adjustment, duplicate therapy detection",
+    "AI assistant for patient summaries and diagnosis suggestions",
+    "Bed management with occupancy view and transfer tracking",
+    "Premium auto-generated discharge summary",
+    "Smart diagnosis-based templates",
+    "Data backup and export as PDF/CSV",
+    "Lab integration API endpoint",
+    "Performance optimization with lazy loading and IndexedDB caching"
+  ],
+  "category": "healthcare",
+  "tags": [
+    "emr",
+    "patient-management",
+    "doctor-portal",
+    "clinical-intelligence",
+    "bilingual",
+    "offline-first",
+    "bangladesh",
+    "prescription",
+    "ward-round",
+    "healthcare"
+  ],
+  "last_updated": "2026-04-11T13:52:57.807Z"
+}

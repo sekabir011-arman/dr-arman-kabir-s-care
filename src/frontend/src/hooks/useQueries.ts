@@ -1,0 +1,1550 @@
+import type { Principal } from "@icp-sdk/core/principal";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type {
+  AdmissionHistory,
+  AuditEntry,
+  BedRecord,
+  ClinicalAlert,
+  ClinicalNote,
+  ClinicalOrder,
+  DiagnosisTemplate,
+  DrugReminder,
+  Encounter,
+  Medication,
+  Observation,
+  Patient,
+  Prescription,
+  PrescriptionHeaderType,
+  PrescriptionLabel,
+  PrescriptionRecord,
+  PrescriptionStatus,
+  StaffRole,
+  UserProfile,
+  Visit,
+  VitalSigns,
+} from "../types";
+
+// ─── BigInt serialization helpers ───────────────────────────────────────────
+
+function serializeBigInt(value: unknown): unknown {
+  if (typeof value === "bigint") {
+    return `__bigint__${value.toString()}`;
+  }
+  if (Array.isArray(value)) {
+    return value.map(serializeBigInt);
+  }
+  if (value !== null && typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      result[k] = serializeBigInt(v);
+    }
+    return result;
+  }
+  return value;
+}
+
+function deserializeBigInt(value: unknown): unknown {
+  if (typeof value === "string" && value.startsWith("__bigint__")) {
+    return BigInt(value.slice(10));
+  }
+  if (Array.isArray(value)) {
+    return value.map(deserializeBigInt);
+  }
+  if (value !== null && typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      result[k] = deserializeBigInt(v);
+    }
+    return result;
+  }
+  return value;
+}
+
+export function saveToStorage<T>(key: string, data: T[]): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(serializeBigInt(data)));
+  } catch (err) {
+    console.error("saveToStorage error:", key, err);
+    throw err;
+  }
+}
+
+export function loadFromStorage<T>(key: string): T[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    return deserializeBigInt(JSON.parse(raw)) as T[];
+  } catch {
+    return [];
+  }
+}
+
+// Scan ALL keys with prefix (e.g., patients_*) regardless of doctor email
+export function loadFromAllDoctorKeys<T>(prefix: string): T[] {
+  try {
+    const results: T[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(`${prefix}_`)) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (!raw) continue;
+          const items = deserializeBigInt(JSON.parse(raw)) as T[];
+          if (Array.isArray(items)) results.push(...items);
+        } catch {}
+      }
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+// ─── Doctor email helper ─────────────────────────────────────────────────────
+
+export function getDoctorEmail(): string {
+  try {
+    // First try the staff_auth key (legacy)
+    const raw = localStorage.getItem("staff_auth");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.email) return parsed.email;
+    }
+    // Fall back to the doctor session
+    const sessionId = localStorage.getItem("medicare_current_doctor");
+    if (sessionId) {
+      const registry = JSON.parse(
+        localStorage.getItem("medicare_doctors_registry") || "[]",
+      ) as Array<{ id: string; email: string }>;
+      const doctor = registry.find((d) => d.id === sessionId);
+      if (doctor?.email) return doctor.email;
+    }
+    return "default";
+  } catch {
+    return "default";
+  }
+}
+
+export function storageKey(prefix: string): string {
+  return `${prefix}_${getDoctorEmail()}`;
+}
+
+// Helper to get visit form data, scanning all doctor emails as fallback
+export function getVisitFormData(
+  visitId: string | bigint | null,
+): Record<string, any> | null {
+  if (!visitId) return null;
+  const id = String(visitId);
+  const email = getDoctorEmail();
+  try {
+    const raw = localStorage.getItem(`visit_form_data_${id}_${email}`);
+    if (raw) return JSON.parse(raw) as Record<string, unknown>;
+  } catch {}
+  // Scan all matching keys
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith(`visit_form_data_${id}_`)) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw) return JSON.parse(raw) as Record<string, unknown>;
+      } catch {}
+    }
+  }
+  return null;
+}
+
+function nextId<T extends { id: bigint }>(items: T[]): bigint {
+  if (items.length === 0) return 1n;
+  return items.reduce((max, item) => (item.id > max ? item.id : max), 0n) + 1n;
+}
+
+// ─── Register number generator ───────────────────────────────────────────────
+
+export function generateRegisterNumber(): string {
+  const counter =
+    Number.parseInt(localStorage.getItem("medicare_register_counter") || "0") +
+    1;
+  localStorage.setItem("medicare_register_counter", String(counter));
+  const year = new Date().getFullYear().toString().slice(-2);
+  return `${String(counter).padStart(4, "0")}/${year}`;
+}
+
+// ─── Direct patient creation (used by appointment confirmation) ───────────────
+
+export function createPatientInStorage(data: {
+  fullName: string;
+  phone?: string | null;
+  gender?: string;
+  dateOfBirth?: bigint | null;
+  patientType?: string;
+  allergies?: string[];
+  chronicConditions?: string[];
+}): Patient {
+  const key = storageKey("patients");
+  const patients = loadFromStorage<Patient>(key);
+  // Avoid duplicates (same name + phone)
+  const exists = patients.find(
+    (p) =>
+      p.fullName.toLowerCase() === data.fullName.toLowerCase() &&
+      (data.phone ? p.phone === data.phone : true),
+  );
+  if (exists) return exists;
+
+  const registerNumber = generateRegisterNumber();
+  const newPatient = {
+    id: nextId(patients),
+    fullName: data.fullName,
+    phone: data.phone ?? undefined,
+    gender: (data.gender ?? "male") as Patient["gender"],
+    dateOfBirth: data.dateOfBirth ?? undefined,
+    patientType: (data.patientType ?? "outdoor") as Patient["patientType"],
+    allergies: data.allergies ?? [],
+    chronicConditions: data.chronicConditions ?? [],
+    createdAt: BigInt(Date.now()) * 1000000n,
+    registerNumber,
+  } as Patient;
+  saveToStorage(key, [...patients, newPatient]);
+  return newPatient;
+}
+
+// ─── Patients ────────────────────────────────────────────────────────────────
+
+export function useGetAllPatients() {
+  return useQuery<Patient[]>({
+    queryKey: ["patients"],
+    queryFn: async () => {
+      return loadFromStorage<Patient>(storageKey("patients"));
+    },
+  });
+}
+
+export function useGetPatient(id: bigint | null) {
+  return useQuery<Patient | null>({
+    queryKey: ["patient", id?.toString()],
+    queryFn: async () => {
+      if (!id) return null;
+      // First try the current doctor's key
+      const primary = loadFromStorage<Patient>(storageKey("patients"));
+      const found = primary.find((p) => p.id === id);
+      if (found) return found;
+      // Fallback: scan all patients_* keys (needed when patient is logged in without a doctor session)
+      const all = loadFromAllDoctorKeys<Patient>("patients");
+      return all.find((p) => p.id === id) ?? null;
+    },
+    enabled: !!id,
+  });
+}
+
+export function useCreatePatient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      fullName: string;
+      nameBn: string | null;
+      dateOfBirth: bigint | null;
+      gender: string;
+      phone: string | null;
+      email: string | null;
+      address: string | null;
+      bloodGroup: string | null;
+      weight: number | null;
+      height: number | null;
+      allergies: string[];
+      chronicConditions: string[];
+      pastSurgicalHistory: string | null;
+      patientType: string;
+      photo?: string | null;
+    }) => {
+      try {
+        const key = storageKey("patients");
+        const patients = loadFromStorage<Patient>(key);
+        const registerNumber = generateRegisterNumber();
+        const newPatient: Patient = {
+          id: nextId(patients),
+          fullName: data.fullName,
+          nameBn: data.nameBn ?? undefined,
+          dateOfBirth: data.dateOfBirth ?? undefined,
+          gender: data.gender as Patient["gender"],
+          phone: data.phone ?? undefined,
+          email: data.email ?? undefined,
+          address: data.address ?? undefined,
+          bloodGroup: data.bloodGroup ?? undefined,
+          weight: data.weight ?? undefined,
+          height: data.height ?? undefined,
+          allergies: data.allergies,
+          chronicConditions: data.chronicConditions,
+          pastSurgicalHistory: data.pastSurgicalHistory ?? undefined,
+          patientType: data.patientType as Patient["patientType"],
+          createdAt: BigInt(Date.now()) * 1000000n,
+          registerNumber,
+        } as Patient;
+        if (data.photo !== undefined) {
+          (newPatient as Record<string, unknown>).photo = data.photo;
+        }
+        saveToStorage(key, [...patients, newPatient]);
+        return newPatient;
+      } catch (err) {
+        console.error("useCreatePatient error:", err);
+        throw new Error("Failed to save patient. Please try again.");
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["patients"] }),
+  });
+}
+
+export function useUpdatePatient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      id: bigint;
+      fullName: string;
+      nameBn: string | null;
+      dateOfBirth: bigint | null;
+      gender: string;
+      phone: string | null;
+      email: string | null;
+      address: string | null;
+      bloodGroup: string | null;
+      weight: number | null;
+      height: number | null;
+      allergies: string[];
+      chronicConditions: string[];
+      pastSurgicalHistory: string | null;
+      patientType: string;
+      photo?: string | null;
+    }) => {
+      try {
+        const key = storageKey("patients");
+        const patients = loadFromStorage<Patient>(key);
+        const updated = patients.map((p) =>
+          p.id === data.id
+            ? {
+                ...p,
+                fullName: data.fullName,
+                nameBn: data.nameBn ?? undefined,
+                dateOfBirth: data.dateOfBirth ?? undefined,
+                gender: data.gender as Patient["gender"],
+                phone: data.phone ?? undefined,
+                email: data.email ?? undefined,
+                address: data.address ?? undefined,
+                bloodGroup: data.bloodGroup ?? undefined,
+                weight: data.weight ?? undefined,
+                height: data.height ?? undefined,
+                allergies: data.allergies,
+                chronicConditions: data.chronicConditions,
+                pastSurgicalHistory: data.pastSurgicalHistory ?? undefined,
+                patientType: data.patientType as Patient["patientType"],
+                ...(data.photo !== undefined ? { photo: data.photo } : {}),
+              }
+            : p,
+        );
+        saveToStorage(key, updated);
+        return updated.find((p) => p.id === data.id) as Patient;
+      } catch (err) {
+        console.error("useUpdatePatient error:", err);
+        throw new Error("Failed to update patient. Please try again.");
+      }
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["patients"] });
+      qc.invalidateQueries({ queryKey: ["patient", vars.id.toString()] });
+    },
+  });
+}
+
+export function useDeletePatient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: bigint) => {
+      const key = storageKey("patients");
+      const patients = loadFromStorage<Patient>(key);
+      saveToStorage(
+        key,
+        patients.filter((p) => p.id !== id),
+      );
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["patients"] }),
+  });
+}
+
+// ─── Visits ──────────────────────────────────────────────────────────────────
+
+export function useGetVisitsByPatient(patientId: bigint | null) {
+  return useQuery<Visit[]>({
+    queryKey: ["visits", patientId?.toString()],
+    queryFn: async () => {
+      if (!patientId) return [];
+      const primary = loadFromStorage<Visit>(storageKey("visits"));
+      const found = primary.filter((v) => v.patientId === patientId);
+      if (found.length > 0) return found;
+      // Fallback: scan all visits_* keys
+      const all = loadFromAllDoctorKeys<Visit>("visits");
+      return all.filter((v) => v.patientId === patientId);
+    },
+    enabled: !!patientId,
+  });
+}
+
+export function useCreateVisit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      patientId: bigint;
+      visitDate: bigint;
+      chiefComplaint: string;
+      historyOfPresentIllness: string | null;
+      vitalSigns: VitalSigns;
+      physicalExamination: string | null;
+      diagnosis: string | null;
+      notes: string | null;
+      visitType: string;
+    }) => {
+      const key = storageKey("visits");
+      const visits = loadFromStorage<Visit>(key);
+      const newVisit: Visit = {
+        id: nextId(visits),
+        patientId: data.patientId,
+        visitDate: data.visitDate,
+        chiefComplaint: data.chiefComplaint,
+        historyOfPresentIllness: data.historyOfPresentIllness ?? undefined,
+        vitalSigns: data.vitalSigns,
+        physicalExamination: data.physicalExamination ?? undefined,
+        diagnosis: data.diagnosis ?? undefined,
+        notes: data.notes ?? undefined,
+        visitType: data.visitType as Visit["visitType"],
+        createdAt: BigInt(Date.now()) * 1000000n,
+      };
+      saveToStorage(key, [...visits, newVisit]);
+      return newVisit;
+    },
+    onSuccess: (_, vars) =>
+      qc.invalidateQueries({ queryKey: ["visits", vars.patientId.toString()] }),
+  });
+}
+
+export function useDeleteVisit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      patientId: _patientId,
+    }: { id: bigint; patientId: bigint }) => {
+      const key = storageKey("visits");
+      const visits = loadFromStorage<Visit>(key);
+      saveToStorage(
+        key,
+        visits.filter((v) => v.id !== id),
+      );
+    },
+    onSuccess: (_, vars) =>
+      qc.invalidateQueries({ queryKey: ["visits", vars.patientId.toString()] }),
+  });
+}
+
+export function useUpdateVisit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      id: bigint;
+      patientId: bigint;
+      visitDate: bigint;
+      chiefComplaint: string;
+      historyOfPresentIllness: string | null;
+      vitalSigns: VitalSigns;
+      physicalExamination: string | null;
+      diagnosis: string | null;
+      notes: string | null;
+      visitType: string;
+    }) => {
+      const key = storageKey("visits");
+      const visits = loadFromStorage<Visit>(key);
+      const updated = visits.map((v) =>
+        v.id === data.id
+          ? {
+              ...v,
+              patientId: data.patientId,
+              visitDate: data.visitDate,
+              chiefComplaint: data.chiefComplaint,
+              historyOfPresentIllness:
+                data.historyOfPresentIllness ?? undefined,
+              vitalSigns: data.vitalSigns,
+              physicalExamination: data.physicalExamination ?? undefined,
+              diagnosis: data.diagnosis ?? undefined,
+              notes: data.notes ?? undefined,
+              visitType: data.visitType as Visit["visitType"],
+            }
+          : v,
+      );
+      saveToStorage(key, updated);
+      return updated.find((v) => v.id === data.id) as Visit;
+    },
+    onSuccess: (_, vars) =>
+      qc.invalidateQueries({ queryKey: ["visits", vars.patientId.toString()] }),
+  });
+}
+
+// ─── Prescriptions ───────────────────────────────────────────────────────────
+
+export function useGetPrescriptionsByPatient(patientId: bigint | null) {
+  return useQuery<Prescription[]>({
+    queryKey: ["prescriptions", patientId?.toString()],
+    queryFn: async () => {
+      if (!patientId) return [];
+      const primary = loadFromStorage<Prescription>(
+        storageKey("prescriptions"),
+      );
+      const found = primary.filter((p) => p.patientId === patientId);
+      if (found.length > 0) return found;
+      // Fallback: scan all prescriptions_* keys
+      const all = loadFromAllDoctorKeys<Prescription>("prescriptions");
+      return all.filter((p) => p.patientId === patientId);
+    },
+    enabled: !!patientId,
+  });
+}
+
+export function useCreatePrescription() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      patientId: bigint;
+      visitId: bigint | null;
+      prescriptionDate: bigint;
+      diagnosis: string | null;
+      medications: Medication[];
+      notes: string | null;
+    }) => {
+      const key = storageKey("prescriptions");
+      const prescriptions = loadFromStorage<Prescription>(key);
+      const newPrescription: Prescription = {
+        id: nextId(prescriptions),
+        patientId: data.patientId,
+        visitId: data.visitId ?? undefined,
+        prescriptionDate: data.prescriptionDate,
+        diagnosis: data.diagnosis ?? undefined,
+        medications: data.medications,
+        notes: data.notes ?? undefined,
+        createdAt: BigInt(Date.now()) * 1000000n,
+      };
+      saveToStorage(key, [...prescriptions, newPrescription]);
+      return newPrescription;
+    },
+    onSuccess: (_, vars) =>
+      qc.invalidateQueries({
+        queryKey: ["prescriptions", vars.patientId.toString()],
+      }),
+  });
+}
+
+export function useDeletePrescription() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      patientId: _patientId,
+    }: {
+      id: bigint;
+      patientId: bigint;
+    }) => {
+      const key = storageKey("prescriptions");
+      const prescriptions = loadFromStorage<Prescription>(key);
+      saveToStorage(
+        key,
+        prescriptions.filter((p) => p.id !== id),
+      );
+    },
+    onSuccess: (_, vars) =>
+      qc.invalidateQueries({
+        queryKey: ["prescriptions", vars.patientId.toString()],
+      }),
+  });
+}
+
+export function useUpdatePrescription() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      id: bigint;
+      patientId: bigint;
+      visitId: bigint | null;
+      prescriptionDate: bigint;
+      diagnosis: string | null;
+      medications: Medication[];
+      notes: string | null;
+    }) => {
+      const key = storageKey("prescriptions");
+      const prescriptions = loadFromStorage<Prescription>(key);
+      const updated = prescriptions.map((p) =>
+        p.id === data.id
+          ? {
+              ...p,
+              visitId: data.visitId ?? undefined,
+              prescriptionDate: data.prescriptionDate,
+              diagnosis: data.diagnosis ?? undefined,
+              medications: data.medications,
+              notes: data.notes ?? undefined,
+            }
+          : p,
+      );
+      saveToStorage(key, updated);
+      return updated.find((p) => p.id === data.id) as Prescription;
+    },
+    onSuccess: (_, vars) =>
+      qc.invalidateQueries({
+        queryKey: ["prescriptions", vars.patientId.toString()],
+      }),
+  });
+}
+
+// ─── User profile ────────────────────────────────────────────────────────────
+
+export function useGetCallerUserProfile() {
+  return useQuery<UserProfile | null>({
+    queryKey: ["userProfile"],
+    queryFn: async () => {
+      const email = getDoctorEmail();
+      const raw = localStorage.getItem(`doctor_profile_${email}`);
+      if (!raw) return { name: "" };
+      try {
+        return JSON.parse(raw) as UserProfile;
+      } catch {
+        return { name: "" };
+      }
+    },
+  });
+}
+
+export function useGetCallerUserRole() {
+  return useQuery<string>({
+    queryKey: ["userRole"],
+    queryFn: async () => {
+      return "user";
+    },
+  });
+}
+
+export function useSaveCallerUserProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (profile: UserProfile) => {
+      const email = getDoctorEmail();
+      localStorage.setItem(`doctor_profile_${email}`, JSON.stringify(profile));
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["userProfile"] }),
+  });
+}
+
+// ─── Clinical Data Engine Hooks (localStorage-backed, canister-ready) ─────────
+// These hooks store data in localStorage with unique keys per entity type.
+// When the hybrid backend is connected, the same data will flow through the canister.
+
+const CLINICAL_STORAGE_KEY = "medicare_clinical_data";
+
+function getClinicalStore(): Record<string, unknown[]> {
+  try {
+    const raw = localStorage.getItem(CLINICAL_STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, unknown[]>;
+  } catch {
+    return {};
+  }
+}
+
+function saveClinicalStore(store: Record<string, unknown[]>): void {
+  try {
+    localStorage.setItem(CLINICAL_STORAGE_KEY, JSON.stringify(store));
+  } catch {}
+}
+
+function getClinicalEntities<T>(entityType: string): T[] {
+  const store = getClinicalStore();
+  return (store[entityType] ?? []) as T[];
+}
+
+function saveClinicalEntities<T>(entityType: string, items: T[]): void {
+  const store = getClinicalStore();
+  store[entityType] = items as unknown[];
+  saveClinicalStore(store);
+}
+
+function nextClinicalId<T extends { id: bigint }>(items: T[]): bigint {
+  if (items.length === 0) return 1n;
+  return items.reduce((max, item) => (item.id > max ? item.id : max), 0n) + 1n;
+}
+
+// ── Encounters ────────────────────────────────────────────────────────────────
+
+export function useGetEncountersByPatient(patientId: bigint | null) {
+  return useQuery<Encounter[]>({
+    queryKey: ["encounters", patientId?.toString()],
+    queryFn: async () => {
+      if (!patientId) return [];
+      const all = getClinicalEntities<Encounter>("encounters");
+      return all.filter((e) => e.patientId === patientId);
+    },
+    enabled: !!patientId,
+  });
+}
+
+// ── Observations ─────────────────────────────────────────────────────────────
+
+export function useGetObservationsByPatient(patientId: bigint | null) {
+  return useQuery<Observation[]>({
+    queryKey: ["observations", patientId?.toString()],
+    queryFn: async () => {
+      if (!patientId) return [];
+      const all = getClinicalEntities<Observation>("observations");
+      return all.filter((o) => o.patientId === patientId && !o.isDeleted);
+    },
+    enabled: !!patientId,
+  });
+}
+
+export function useGetObservationsByType(
+  patientId: bigint | null,
+  type: Observation["observationType"] | null,
+) {
+  return useQuery<Observation[]>({
+    queryKey: ["observations", patientId?.toString(), type],
+    queryFn: async () => {
+      if (!patientId || !type) return [];
+      const all = getClinicalEntities<Observation>("observations");
+      return all.filter(
+        (o) =>
+          o.patientId === patientId &&
+          o.observationType === type &&
+          !o.isDeleted,
+      );
+    },
+    enabled: !!patientId && !!type,
+  });
+}
+
+export function useCreateObservation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: Omit<Observation, "id" | "versionInfo" | "status" | "isDeleted">,
+    ) => {
+      const all = getClinicalEntities<Observation>("observations");
+      const newObs: Observation = {
+        ...data,
+        id: nextClinicalId(all),
+        status: "Preliminary",
+        isDeleted: false,
+        versionInfo: {
+          version: 1,
+          createdAt: BigInt(Date.now()) * 1_000_000n,
+          createdBy: { toString: () => "local" } as unknown as Principal,
+          createdByName: data.recordedByName,
+          createdByRole: data.recordedByRole,
+        },
+      };
+      saveClinicalEntities("observations", [...all, newObs]);
+      return newObs;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({
+        queryKey: ["observations", vars.patientId.toString()],
+      });
+    },
+  });
+}
+
+// ── Clinical Orders ───────────────────────────────────────────────────────────
+
+export function useGetOrdersByPatient(patientId: bigint | null) {
+  return useQuery<ClinicalOrder[]>({
+    queryKey: ["orders", patientId?.toString()],
+    queryFn: async () => {
+      if (!patientId) return [];
+      const all = getClinicalEntities<ClinicalOrder>("orders");
+      return all.filter((o) => o.patientId === patientId);
+    },
+    enabled: !!patientId,
+  });
+}
+
+export function useGetActiveOrdersByPatient(patientId: bigint | null) {
+  return useQuery<ClinicalOrder[]>({
+    queryKey: ["orders", "active", patientId?.toString()],
+    queryFn: async () => {
+      if (!patientId) return [];
+      const all = getClinicalEntities<ClinicalOrder>("orders");
+      const activeStatuses: ClinicalOrder["status"][] = [
+        "Requested",
+        "Pending",
+        "InProgress",
+      ];
+      return all.filter(
+        (o) => o.patientId === patientId && activeStatuses.includes(o.status),
+      );
+    },
+    enabled: !!patientId,
+  });
+}
+
+export function useCreateOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: Omit<ClinicalOrder, "id" | "versionInfo" | "status">,
+    ) => {
+      const all = getClinicalEntities<ClinicalOrder>("orders");
+      const newOrder: ClinicalOrder = {
+        ...data,
+        id: nextClinicalId(all),
+        status: "Requested",
+        versionInfo: {
+          version: 1,
+          createdAt: BigInt(Date.now()) * 1_000_000n,
+          createdBy: { toString: () => "local" } as unknown as Principal,
+          createdByName: data.orderedByName,
+          createdByRole: data.orderedByRole,
+        },
+      };
+      saveClinicalEntities("orders", [...all, newOrder]);
+      return newOrder;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["orders", vars.patientId.toString()] });
+      qc.invalidateQueries({
+        queryKey: ["orders", "active", vars.patientId.toString()],
+      });
+    },
+  });
+}
+
+export function useUpdateOrderStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      id: bigint;
+      patientId: bigint;
+      status: ClinicalOrder["status"];
+      result?: string;
+    }) => {
+      const all = getClinicalEntities<ClinicalOrder>("orders");
+      const updated = all.map((o) =>
+        o.id === data.id
+          ? {
+              ...o,
+              status: data.status,
+              result: data.result ?? o.result,
+              completedAt:
+                data.status === "Completed"
+                  ? BigInt(Date.now()) * 1_000_000n
+                  : o.completedAt,
+            }
+          : o,
+      );
+      saveClinicalEntities("orders", updated);
+      return updated.find((o) => o.id === data.id) as ClinicalOrder;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["orders", vars.patientId.toString()] });
+      qc.invalidateQueries({
+        queryKey: ["orders", "active", vars.patientId.toString()],
+      });
+    },
+  });
+}
+
+// ── Clinical Notes ────────────────────────────────────────────────────────────
+
+export function useGetClinicalNotesByPatient(patientId: bigint | null) {
+  return useQuery<ClinicalNote[]>({
+    queryKey: ["clinicalNotes", patientId?.toString()],
+    queryFn: async () => {
+      if (!patientId) return [];
+      const all = getClinicalEntities<ClinicalNote>("clinicalNotes");
+      return all
+        .filter((n) => n.patientId === patientId && !n.isDeleted)
+        .sort((a, b) => Number(b.createdAt - a.createdAt));
+    },
+    enabled: !!patientId,
+  });
+}
+
+export function useCreateClinicalNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: Omit<
+        ClinicalNote,
+        "id" | "versionInfo" | "previousVersionIds" | "isDeleted"
+      >,
+    ) => {
+      const all = getClinicalEntities<ClinicalNote>("clinicalNotes");
+      const newNote: ClinicalNote = {
+        ...data,
+        id: nextClinicalId(all),
+        isDeleted: false,
+        previousVersionIds: [],
+        versionInfo: {
+          version: 1,
+          createdAt: data.createdAt,
+          createdBy: { toString: () => "local" } as unknown as Principal,
+          createdByName: data.authorName,
+          createdByRole: data.authorRole,
+        },
+      };
+      saveClinicalEntities("clinicalNotes", [...all, newNote]);
+      return newNote;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({
+        queryKey: ["clinicalNotes", vars.patientId.toString()],
+      });
+    },
+  });
+}
+
+export function useUpdateClinicalNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      id: bigint;
+      patientId: bigint;
+      content: string;
+      isDraft: boolean;
+      changeReason?: string;
+    }) => {
+      const all = getClinicalEntities<ClinicalNote>("clinicalNotes");
+      const original = all.find((n) => n.id === data.id);
+      if (!original) throw new Error("Note not found");
+
+      // Create versioned update — never overwrite, always append new version
+      const updatedNote: ClinicalNote = {
+        ...original,
+        content: data.content,
+        isDraft: data.isDraft,
+        previousVersionIds: [...original.previousVersionIds, original.id],
+        versionInfo: {
+          ...original.versionInfo,
+          version: original.versionInfo.version + 1,
+          changeReason: data.changeReason,
+          createdAt: BigInt(Date.now()) * 1_000_000n,
+        },
+      };
+      saveClinicalEntities(
+        "clinicalNotes",
+        all.map((n) => (n.id === data.id ? updatedNote : n)),
+      );
+      return updatedNote;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({
+        queryKey: ["clinicalNotes", vars.patientId.toString()],
+      });
+    },
+  });
+}
+
+// ── Clinical Alerts ───────────────────────────────────────────────────────────
+
+export function useGetAlertsByPatient(patientId: bigint | null) {
+  return useQuery<ClinicalAlert[]>({
+    queryKey: ["alerts", patientId?.toString()],
+    queryFn: async () => {
+      if (!patientId) return [];
+      const all = getClinicalEntities<ClinicalAlert>("alerts");
+      return all
+        .filter((a) => a.patientId === patientId && !a.isResolved)
+        .sort((a, b) => Number(b.triggeredAt - a.triggeredAt));
+    },
+    enabled: !!patientId,
+  });
+}
+
+export function useGetUnacknowledgedAlerts() {
+  return useQuery<ClinicalAlert[]>({
+    queryKey: ["alerts", "unacknowledged"],
+    queryFn: async () => {
+      const all = getClinicalEntities<ClinicalAlert>("alerts");
+      return all.filter((a) => !a.isAcknowledged && !a.isResolved);
+    },
+  });
+}
+
+export function useAcknowledgeAlert() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: bigint) => {
+      const all = getClinicalEntities<ClinicalAlert>("alerts");
+      const updated = all.map((a) =>
+        a.id === id
+          ? {
+              ...a,
+              isAcknowledged: true,
+              acknowledgedAt: BigInt(Date.now()) * 1_000_000n,
+            }
+          : a,
+      );
+      saveClinicalEntities("alerts", updated);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["alerts"] });
+    },
+  });
+}
+
+// ── Beds ──────────────────────────────────────────────────────────────────────
+
+export function useGetAllBeds() {
+  return useQuery<BedRecord[]>({
+    queryKey: ["beds"],
+    queryFn: async () => {
+      return getClinicalEntities<BedRecord>("beds");
+    },
+  });
+}
+
+export function useCreateBedRecord() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { bedNumber: string; ward: string }) => {
+      const all = getClinicalEntities<BedRecord>("beds");
+      const newBed: BedRecord = {
+        id: nextClinicalId(all),
+        bedNumber: data.bedNumber,
+        ward: data.ward,
+        status: "Empty",
+        transferHistory: [],
+      };
+      saveClinicalEntities("beds", [...all, newBed]);
+      return newBed;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["beds"] }),
+  });
+}
+
+export function useAssignBed() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      bedId: bigint;
+      patientId: bigint;
+      patientName: string;
+    }) => {
+      const all = getClinicalEntities<BedRecord>("beds");
+      const updated = all.map((b) =>
+        b.id === data.bedId
+          ? {
+              ...b,
+              status: "Occupied" as BedRecord["status"],
+              patientId: data.patientId,
+              patientName: data.patientName,
+              admissionDate: BigInt(Date.now()) * 1_000_000n,
+            }
+          : b,
+      );
+      saveClinicalEntities("beds", updated);
+      return updated.find((b) => b.id === data.bedId) as BedRecord;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["beds"] }),
+  });
+}
+
+// ── Diagnosis Templates ───────────────────────────────────────────────────────
+
+export function useGetDiagnosisTemplates() {
+  return useQuery<DiagnosisTemplate[]>({
+    queryKey: ["diagnosisTemplates"],
+    queryFn: async () => {
+      return getClinicalEntities<DiagnosisTemplate>(
+        "diagnosisTemplates",
+      ).filter((t) => t.isActive);
+    },
+  });
+}
+
+// ── Audit Trail ───────────────────────────────────────────────────────────────
+
+export function useGetAuditTrail(patientId: bigint | null) {
+  return useQuery<AuditEntry[]>({
+    queryKey: ["auditTrail", patientId?.toString()],
+    queryFn: async () => {
+      if (!patientId) return [];
+      const all = getClinicalEntities<AuditEntry>("auditTrail");
+      return all
+        .filter((e) => e.entityId === patientId)
+        .sort((a, b) => Number(b.changedAt - a.changedAt));
+    },
+    enabled: !!patientId,
+  });
+}
+
+// ── Admission History ─────────────────────────────────────────────────────────
+
+export function admissionHistoryKey(patientId: bigint | string): string {
+  return `admissionHistory_${patientId}`;
+}
+
+export function loadAdmissionHistory(
+  patientId: bigint | string,
+): AdmissionHistory[] {
+  try {
+    const raw = localStorage.getItem(admissionHistoryKey(patientId));
+    if (!raw) return [];
+    return JSON.parse(raw) as AdmissionHistory[];
+  } catch {
+    return [];
+  }
+}
+
+export function saveAdmissionHistory(
+  patientId: bigint | string,
+  records: AdmissionHistory[],
+): void {
+  try {
+    localStorage.setItem(
+      admissionHistoryKey(patientId),
+      JSON.stringify(records),
+    );
+  } catch {}
+}
+
+export function useGetAdmissionHistory(patientId: bigint | null) {
+  return useQuery<AdmissionHistory[]>({
+    queryKey: ["admissionHistory", patientId?.toString()],
+    queryFn: async () => {
+      if (!patientId) return [];
+      return loadAdmissionHistory(patientId);
+    },
+    enabled: !!patientId,
+  });
+}
+
+export function useAdmitPatient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      patientId: bigint;
+      hospitalName: string;
+      ward: string;
+      bed: string;
+      admittedOn: string;
+      admittedBy: string;
+      admittedByRole: string;
+      reasonForAdmission: string;
+      carriedOverComplaints: string[];
+      carriedOverDiagnosis: string[];
+      carriedOverDrugHistory: string[];
+      carriedOverPrescriptions: string[];
+      isIntern: boolean;
+    }) => {
+      // 1. Update patient record
+      const key = storageKey("patients");
+      const patients = loadFromStorage<Patient>(key);
+      const updated = patients.map((p) =>
+        p.id === data.patientId
+          ? {
+              ...p,
+              status: "Admitted" as const,
+              bedNumber: data.bed,
+              ward: data.ward,
+              hospitalName: data.hospitalName,
+              admittedOn: data.admittedOn,
+              isAdmitted: true,
+              patientType: "admitted" as Patient["patientType"],
+            }
+          : p,
+      );
+      saveToStorage(key, updated);
+
+      // 2. Create admission history record
+      const newRecord: AdmissionHistory = {
+        id: `adm_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        patientId: data.patientId.toString(),
+        admittedOn: data.admittedOn,
+        admittedBy: data.admittedBy,
+        admittedByRole: data.admittedByRole,
+        hospitalName: data.hospitalName,
+        ward: data.ward,
+        bed: data.bed,
+        reasonForAdmission: data.reasonForAdmission,
+        carriedOverComplaints: data.carriedOverComplaints,
+        carriedOverDiagnosis: data.carriedOverDiagnosis,
+        carriedOverDrugHistory: data.carriedOverDrugHistory,
+        carriedOverPrescriptions: data.carriedOverPrescriptions,
+        admissionHistoryStatus: data.isIntern
+          ? "draft_awaiting_approval"
+          : "complete",
+        dailyProgressNotes: [],
+        dischargedOn: null,
+        status: "active",
+        createdAt: new Date().toISOString(),
+      };
+      const existing = loadAdmissionHistory(data.patientId);
+      saveAdmissionHistory(data.patientId, [...existing, newRecord]);
+
+      // 3. Log to audit trail
+      const auditAll = getClinicalEntities<AuditEntry>("auditTrail");
+      const newAuditEntry: AuditEntry = {
+        id: nextClinicalId(auditAll),
+        entityType: "Patient",
+        entityId: data.patientId,
+        fieldName: "status",
+        beforeValue: "Active",
+        afterValue: "Admitted",
+        changedBy: { toString: () => "local" } as unknown as Principal,
+        changedByName: data.admittedBy,
+        changedByRole: data.admittedByRole as import("../types").StaffRole,
+        changedAt: BigInt(Date.now()) * 1_000_000n,
+        reason: `Admitted to ${data.hospitalName} — ${data.ward}, Bed ${data.bed}`,
+      };
+      saveClinicalEntities("auditTrail", [...auditAll, newAuditEntry]);
+
+      return newRecord;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["patients"] });
+      qc.invalidateQueries({
+        queryKey: ["patient", vars.patientId.toString()],
+      });
+      qc.invalidateQueries({
+        queryKey: ["admissionHistory", vars.patientId.toString()],
+      });
+    },
+  });
+}
+
+export function useDischargePatient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      patientId: bigint;
+      dischargedBy: string;
+      dischargedByRole: string;
+    }) => {
+      // Update patient record
+      const key = storageKey("patients");
+      const patients = loadFromStorage<Patient>(key);
+      const updated = patients.map((p) =>
+        p.id === data.patientId
+          ? {
+              ...p,
+              status: "Discharged" as const,
+              isAdmitted: false,
+              patientType: "outdoor" as Patient["patientType"],
+              dischargeDate: new Date().toISOString(),
+            }
+          : p,
+      );
+      saveToStorage(key, updated);
+
+      // Mark active admission as discharged
+      const admissions = loadAdmissionHistory(data.patientId);
+      const updatedAdmissions = admissions.map((a) =>
+        a.status === "active"
+          ? {
+              ...a,
+              status: "discharged" as const,
+              dischargedOn: new Date().toISOString(),
+            }
+          : a,
+      );
+      saveAdmissionHistory(data.patientId, updatedAdmissions);
+
+      // Audit log
+      const auditAll = getClinicalEntities<AuditEntry>("auditTrail");
+      const entry: AuditEntry = {
+        id: nextClinicalId(auditAll),
+        entityType: "Patient",
+        entityId: data.patientId,
+        fieldName: "status",
+        beforeValue: "Admitted",
+        afterValue: "Discharged",
+        changedBy: { toString: () => "local" } as unknown as Principal,
+        changedByName: data.dischargedBy,
+        changedByRole: data.dischargedByRole as import("../types").StaffRole,
+        changedAt: BigInt(Date.now()) * 1_000_000n,
+        reason: "Patient discharged",
+      };
+      saveClinicalEntities("auditTrail", [...auditAll, entry]);
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["patients"] });
+      qc.invalidateQueries({
+        queryKey: ["patient", vars.patientId.toString()],
+      });
+      qc.invalidateQueries({
+        queryKey: ["admissionHistory", vars.patientId.toString()],
+      });
+    },
+  });
+}
+
+// ── Versioned Prescription Records ───────────────────────────────────────────
+
+export function prescriptionRecordsKey(patientId: string | bigint): string {
+  return `prescriptionRecords_${patientId}`;
+}
+
+export function loadPrescriptionRecords(
+  patientId: string | bigint,
+): PrescriptionRecord[] {
+  try {
+    const raw = localStorage.getItem(prescriptionRecordsKey(patientId));
+    if (!raw) return [];
+    return JSON.parse(raw) as PrescriptionRecord[];
+  } catch {
+    return [];
+  }
+}
+
+export function savePrescriptionRecords(
+  patientId: string | bigint,
+  records: PrescriptionRecord[],
+): void {
+  try {
+    localStorage.setItem(
+      prescriptionRecordsKey(patientId),
+      JSON.stringify(records),
+    );
+  } catch {}
+}
+
+export function useGetPrescriptionRecords(patientId: bigint | null) {
+  return useQuery<PrescriptionRecord[]>({
+    queryKey: ["prescriptionRecords", patientId?.toString()],
+    queryFn: async () => {
+      if (!patientId) return [];
+      return loadPrescriptionRecords(patientId);
+    },
+    enabled: !!patientId,
+  });
+}
+
+export function useCreatePrescriptionRecord() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      patientId: bigint;
+      createdBy: string;
+      createdByRole: StaffRole;
+      headerType: PrescriptionHeaderType;
+      status: PrescriptionStatus;
+      diagnosis?: string;
+      drugs: unknown[];
+      adviceText?: string;
+      clinicalSummary?: Record<string, string>;
+      linkedPrescriptionId?: string;
+    }) => {
+      const existing = loadPrescriptionRecords(data.patientId);
+      // Determine label
+      const patientRecords = existing.filter(
+        (r) => r.patientId === data.patientId.toString(),
+      );
+      let label: PrescriptionLabel = null;
+      let labelTimestamp: string | undefined;
+      if (
+        data.headerType === "hospital" ||
+        data.createdByRole === "intern_doctor"
+      ) {
+        if (patientRecords.length === 0) {
+          label = "Order on Admission";
+        } else {
+          label = "Fresh Order";
+          labelTimestamp = new Date().toLocaleString("en-GB", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          });
+        }
+      }
+      const newRecord: PrescriptionRecord = {
+        id: `rx_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        patientId: data.patientId.toString(),
+        version: patientRecords.length + 1,
+        createdAt: new Date().toISOString(),
+        createdBy: data.createdBy,
+        createdByRole: data.createdByRole,
+        label,
+        labelTimestamp,
+        headerType: data.headerType,
+        status: data.status,
+        diagnosis: data.diagnosis,
+        drugs: data.drugs,
+        adviceText: data.adviceText,
+        clinicalSummary: data.clinicalSummary,
+        linkedPrescriptionId: data.linkedPrescriptionId,
+      };
+      savePrescriptionRecords(data.patientId, [...existing, newRecord]);
+      return newRecord;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({
+        queryKey: ["prescriptionRecords", vars.patientId.toString()],
+      });
+    },
+  });
+}
+
+export function useApprovePrescriptionRecord() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      patientId: bigint;
+      recordId: string;
+      approvedBy: string;
+      action: "approve" | "request_changes";
+      comment?: string;
+    }) => {
+      const records = loadPrescriptionRecords(data.patientId);
+      const updated = records.map((r) =>
+        r.id === data.recordId
+          ? {
+              ...r,
+              status: (data.action === "approve"
+                ? "active"
+                : "changes_requested") as PrescriptionStatus,
+              approvalComment: data.comment,
+              approvedBy: data.approvedBy,
+              approvedAt: new Date().toISOString(),
+            }
+          : r,
+      );
+      savePrescriptionRecords(data.patientId, updated);
+      return updated.find((r) => r.id === data.recordId) as PrescriptionRecord;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({
+        queryKey: ["prescriptionRecords", vars.patientId.toString()],
+      });
+    },
+  });
+}
+
+// ── Drug Reminders ─────────────────────────────────────────────────────────────
+
+export function drugRemindersKey(patientId: string | bigint): string {
+  return `drugReminders_${patientId}`;
+}
+
+export function loadDrugReminders(patientId: string | bigint): DrugReminder[] {
+  try {
+    const raw = localStorage.getItem(drugRemindersKey(patientId));
+    if (!raw) return [];
+    return JSON.parse(raw) as DrugReminder[];
+  } catch {
+    return [];
+  }
+}
+
+export function saveDrugReminders(
+  patientId: string | bigint,
+  reminders: DrugReminder[],
+): void {
+  try {
+    localStorage.setItem(
+      drugRemindersKey(patientId),
+      JSON.stringify(reminders),
+    );
+  } catch {}
+}
+
+export function autoPopulateDrugReminders(
+  patientId: bigint | string,
+  medications: Medication[],
+  prescriptionId?: string,
+): void {
+  const existing = loadDrugReminders(patientId);
+  const updated = [...existing];
+  for (const med of medications) {
+    const drugName = med.name || med.drugName || "";
+    if (!drugName) continue;
+    const existingIdx = updated.findIndex(
+      (r) => r.drugName.toLowerCase() === drugName.toLowerCase(),
+    );
+    if (existingIdx >= 0) {
+      // Update the prescription link on the existing reminder
+      updated[existingIdx] = {
+        ...updated[existingIdx],
+        prescriptionId: prescriptionId ?? updated[existingIdx].prescriptionId,
+        dose: med.dose || updated[existingIdx].dose,
+        frequency: med.frequency || updated[existingIdx].frequency,
+        status: "active",
+        lastModified: new Date().toISOString(),
+      };
+    } else {
+      updated.push({
+        id: `reminder_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        patientId: String(patientId),
+        drugName,
+        dose: med.dose,
+        frequency: med.frequency,
+        startDate: new Date().toISOString(),
+        prescriptionId,
+        status: "active",
+        reminderTimes: [],
+        lastModified: new Date().toISOString(),
+      });
+    }
+  }
+  saveDrugReminders(patientId, updated);
+}
+
+export function useGetDrugReminders(patientId: bigint | null) {
+  return useQuery<DrugReminder[]>({
+    queryKey: ["drugReminders", patientId?.toString()],
+    queryFn: async () => {
+      if (!patientId) return [];
+      return loadDrugReminders(patientId);
+    },
+    enabled: !!patientId,
+  });
+}
+
+export function useUpdateDrugReminder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      patientId: bigint;
+      reminderId: string;
+      reminderTimes: string[];
+    }) => {
+      const reminders = loadDrugReminders(data.patientId);
+      const updated = reminders.map((r) =>
+        r.id === data.reminderId
+          ? {
+              ...r,
+              reminderTimes: data.reminderTimes,
+              lastModified: new Date().toISOString(),
+            }
+          : r,
+      );
+      saveDrugReminders(data.patientId, updated);
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({
+        queryKey: ["drugReminders", vars.patientId.toString()],
+      });
+    },
+  });
+}
+
+// ── Prescription Header Images ────────────────────────────────────────────────
+
+export function getPrescriptionHeaderImage(
+  type: PrescriptionHeaderType,
+  doctorEmail?: string,
+): string | null {
+  const email = doctorEmail ?? getDoctorEmail();
+  const key = `prescriptionHeaders_${type}_${email}`;
+  return localStorage.getItem(key);
+}
+
+export function setPrescriptionHeaderImage(
+  type: PrescriptionHeaderType,
+  imageDataUrl: string,
+  doctorEmail?: string,
+): void {
+  const email = doctorEmail ?? getDoctorEmail();
+  const key = `prescriptionHeaders_${type}_${email}`;
+  localStorage.setItem(key, imageDataUrl);
+}

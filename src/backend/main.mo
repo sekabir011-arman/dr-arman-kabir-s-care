@@ -1,0 +1,490 @@
+import Time "mo:core/Time";
+import _List "mo:core/List";
+import Map "mo:core/Map";
+import Array "mo:core/Array";
+import Order "mo:core/Order";
+import Iter "mo:core/Iter";
+import Runtime "mo:core/Runtime";
+import Nat "mo:core/Nat";
+import Principal "mo:core/Principal";
+
+
+import MixinAuthorization "authorization/MixinAuthorization";
+import AccessControl "authorization/access-control";
+import ClinicalDataEngineLib "lib/clinical-data-engine";
+import ClinicalDataEngineMixin "mixins/clinical-data-engine-api";
+
+actor {
+  ///////////////////////////////
+  // Custom Types and Modules  //
+  ///////////////////////////////
+
+  public type Gender = { #male; #female; #other };
+  public type PatientType = { #admitted; #outdoor };
+  public type VisitType = { #admitted; #outdoor };
+
+  public type VitalSigns = {
+    bloodPressure : ?Text;
+    pulse : ?Text;
+    temperature : ?Text;
+    respiratoryRate : ?Text;
+    oxygenSaturation : ?Text;
+  };
+
+  public type Medication = {
+    name : Text;
+    dose : Text;
+    frequency : Text;
+    duration : Text;
+    instructions : Text;
+  };
+
+  public type Patient = {
+    id : Nat;
+    fullName : Text;
+    nameBn : ?Text;
+    dateOfBirth : ?Time.Time;
+    gender : Gender;
+    phone : ?Text;
+    email : ?Text;
+    address : ?Text;
+    bloodGroup : ?Text;
+    weight : ?Float;
+    height : ?Float;
+    allergies : [Text];
+    chronicConditions : [Text];
+    pastSurgicalHistory : ?Text;
+    patientType : PatientType;
+    createdAt : Time.Time;
+  };
+
+  module Patient {
+    public func compare(p1 : Patient, p2 : Patient) : Order.Order {
+      Nat.compare(p1.id, p2.id);
+    };
+  };
+
+  public type Visit = {
+    id : Nat;
+    patientId : Nat;
+    visitDate : Time.Time;
+    chiefComplaint : Text;
+    historyOfPresentIllness : ?Text;
+    vitalSigns : VitalSigns;
+    physicalExamination : ?Text;
+    diagnosis : ?Text;
+    notes : ?Text;
+    visitType : VisitType;
+    createdAt : Time.Time;
+  };
+
+  module Visit {
+    public func compare(v1 : Visit, v2 : Visit) : Order.Order {
+      Nat.compare(v1.id, v2.id);
+    };
+  };
+
+  public type Prescription = {
+    id : Nat;
+    patientId : Nat;
+    visitId : ?Nat;
+    prescriptionDate : Time.Time;
+    diagnosis : ?Text;
+    medications : [Medication];
+    notes : ?Text;
+    createdAt : Time.Time;
+  };
+
+  module Prescription {
+    public func compare(p1 : Prescription, p2 : Prescription) : Order.Order {
+      Nat.compare(p1.id, p2.id);
+    };
+  };
+
+  public type UserProfile = {
+    name : Text;
+  };
+
+  ////////////////////////////
+  // Core Data Structures   //
+  ////////////////////////////
+
+  let patients = Map.empty<Nat, Patient>();
+  let visits = Map.empty<Nat, Visit>();
+  let prescriptions = Map.empty<Nat, Prescription>();
+  let userProfiles = Map.empty<Principal, UserProfile>();
+
+  var patientIdCounter = 1;
+  var visitIdCounter = 1;
+  var prescriptionIdCounter = 1;
+
+  ////////////////////////////
+  // Authorization         //
+  ////////////////////////////
+  let accessControlState = AccessControl.initState();
+  include MixinAuthorization(accessControlState);
+
+  public type CurrentUser = {
+    principal : Principal;
+    role : AccessControl.UserRole;
+  };
+
+  public shared ({ caller }) func getCurrentUser() : async CurrentUser {
+    let role = AccessControl.getUserRole(accessControlState, caller);
+    { principal = caller; role };
+  };
+
+  ////////////////////////////
+  // Clinical Data Engine   //
+  ////////////////////////////
+  let clinicalEngineState = ClinicalDataEngineLib.initState();
+  include ClinicalDataEngineMixin(clinicalEngineState, accessControlState);
+
+  ////////////////////////////
+  // User Profile Functions //
+  ////////////////////////////
+
+  public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view profiles");
+    };
+    userProfiles.get(caller);
+  };
+
+  public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
+    if (caller != user and not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Can only view your own profile");
+    };
+    userProfiles.get(user);
+  };
+
+  public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can save profiles");
+    };
+    userProfiles.add(caller, profile);
+  };
+
+  ////////////////////////////
+  // Patient Functions      //
+  ////////////////////////////
+
+  public shared ({ caller }) func createPatient(
+    fullName : Text,
+    nameBn : ?Text,
+    dateOfBirth : ?Time.Time,
+    gender : Gender,
+    phone : ?Text,
+    email : ?Text,
+    address : ?Text,
+    bloodGroup : ?Text,
+    weight : ?Float,
+    height : ?Float,
+    allergies : [Text],
+    chronicConditions : [Text],
+    pastSurgicalHistory : ?Text,
+    patientType : PatientType
+  ) : async Patient {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can create patients");
+    };
+
+    let patient : Patient = {
+      id = patientIdCounter;
+      fullName;
+      nameBn;
+      dateOfBirth;
+      gender;
+      phone;
+      email;
+      address;
+      bloodGroup;
+      weight;
+      height;
+      allergies;
+      chronicConditions;
+      pastSurgicalHistory;
+      patientType;
+      createdAt = Time.now();
+    };
+
+    patients.add(patientIdCounter, patient);
+    patientIdCounter += 1;
+    patient;
+  };
+
+  public query ({ caller }) func getPatient(id : Nat) : async ?Patient {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can get patients");
+    };
+    patients.get(id);
+  };
+
+  public query ({ caller }) func getAllPatients() : async [Patient] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can get patients");
+    };
+    patients.values().toArray().sort();
+  };
+
+  public shared ({ caller }) func updatePatient(
+    id : Nat,
+    fullName : Text,
+    nameBn : ?Text,
+    dateOfBirth : ?Time.Time,
+    gender : Gender,
+    phone : ?Text,
+    email : ?Text,
+    address : ?Text,
+    bloodGroup : ?Text,
+    weight : ?Float,
+    height : ?Float,
+    allergies : [Text],
+    chronicConditions : [Text],
+    pastSurgicalHistory : ?Text,
+    patientType : PatientType
+  ) : async Patient {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can update patients");
+    };
+
+    let existingPatient = switch (patients.get(id)) {
+      case (null) { Runtime.trap("Patient does not exist") };
+      case (?patient) { patient };
+    };
+
+    let updatedPatient : Patient = {
+      id;
+      fullName;
+      nameBn;
+      dateOfBirth;
+      gender;
+      phone;
+      email;
+      address;
+      bloodGroup;
+      weight;
+      height;
+      allergies;
+      chronicConditions;
+      pastSurgicalHistory;
+      patientType;
+      createdAt = existingPatient.createdAt;
+    };
+
+    patients.add(id, updatedPatient);
+    updatedPatient;
+  };
+
+  public shared ({ caller }) func deletePatient(id : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can delete patients");
+    };
+    patients.remove(id);
+  };
+
+  ////////////////////////////
+  // Visit Functions        //
+  ////////////////////////////
+
+  public shared ({ caller }) func createVisit(
+    patientId : Nat,
+    visitDate : Time.Time,
+    chiefComplaint : Text,
+    historyOfPresentIllness : ?Text,
+    vitalSigns : VitalSigns,
+    physicalExamination : ?Text,
+    diagnosis : ?Text,
+    notes : ?Text,
+    visitType : VisitType
+  ) : async Visit {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can create visits");
+    };
+
+    let visit : Visit = {
+      id = visitIdCounter;
+      patientId;
+      visitDate;
+      chiefComplaint;
+      historyOfPresentIllness;
+      vitalSigns;
+      physicalExamination;
+      diagnosis;
+      notes;
+      visitType;
+      createdAt = Time.now();
+    };
+
+    visits.add(visitIdCounter, visit);
+    visitIdCounter += 1;
+    visit;
+  };
+
+  public query ({ caller }) func getVisit(id : Nat) : async ?Visit {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can get visits");
+    };
+    visits.get(id);
+  };
+
+  public query ({ caller }) func getAllVisits() : async [Visit] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can get visits");
+    };
+    visits.values().toArray().sort();
+  };
+
+  public query ({ caller }) func getVisitsByPatientId(patientId : Nat) : async [Visit] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can get visits");
+    };
+    visits.values().toArray().filter(func(v) { v.patientId == patientId });
+  };
+
+  public shared ({ caller }) func updateVisit(
+    id : Nat,
+    patientId : Nat,
+    visitDate : Time.Time,
+    chiefComplaint : Text,
+    historyOfPresentIllness : ?Text,
+    vitalSigns : VitalSigns,
+    physicalExamination : ?Text,
+    diagnosis : ?Text,
+    notes : ?Text,
+    visitType : VisitType
+  ) : async Visit {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can update visits");
+    };
+
+    let existingVisit = switch (visits.get(id)) {
+      case (null) { Runtime.trap("Visit does not exist") };
+      case (?visit) { visit };
+    };
+
+    let updatedVisit : Visit = {
+      id;
+      patientId;
+      visitDate;
+      chiefComplaint;
+      historyOfPresentIllness;
+      vitalSigns;
+      physicalExamination;
+      diagnosis;
+      notes;
+      visitType;
+      createdAt = existingVisit.createdAt;
+    };
+
+    visits.add(id, updatedVisit);
+    updatedVisit;
+  };
+
+  public shared ({ caller }) func deleteVisit(id : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can delete visits");
+    };
+    visits.remove(id);
+  };
+
+  ////////////////////////////
+  // Prescription Functions //
+  ////////////////////////////
+
+  public shared ({ caller }) func createPrescription(
+    patientId : Nat,
+    visitId : ?Nat,
+    prescriptionDate : Time.Time,
+    diagnosis : ?Text,
+    medications : [Medication],
+    notes : ?Text
+  ) : async Prescription {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can create prescriptions");
+    };
+
+    let prescription : Prescription = {
+      id = prescriptionIdCounter;
+      patientId;
+      visitId;
+      prescriptionDate;
+      diagnosis;
+      medications;
+      notes;
+      createdAt = Time.now();
+    };
+
+    prescriptions.add(prescriptionIdCounter, prescription);
+    prescriptionIdCounter += 1;
+    prescription;
+  };
+
+  public query ({ caller }) func getPrescription(id : Nat) : async ?Prescription {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can get prescriptions");
+    };
+    prescriptions.get(id);
+  };
+
+  public query ({ caller }) func getAllPrescriptions() : async [Prescription] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can get prescriptions");
+    };
+    prescriptions.values().toArray().sort();
+  };
+
+  public query ({ caller }) func getPrescriptionsByPatientId(patientId : Nat) : async [Prescription] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can get prescriptions");
+    };
+    prescriptions.values().toArray().filter(func(p) { p.patientId == patientId });
+  };
+
+  public query ({ caller }) func getPrescriptionsByVisitId(visitId : Nat) : async [Prescription] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can get prescriptions");
+    };
+    prescriptions.values().toArray().filter(func(p) { switch (p.visitId) { case (?id) { id == visitId }; case (null) { false } } });
+  };
+
+  public shared ({ caller }) func updatePrescription(
+    id : Nat,
+    patientId : Nat,
+    visitId : ?Nat,
+    prescriptionDate : Time.Time,
+    diagnosis : ?Text,
+    medications : [Medication],
+    notes : ?Text
+  ) : async Prescription {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can update prescriptions");
+    };
+
+    let existingPrescription = switch (prescriptions.get(id)) {
+      case (null) { Runtime.trap("Prescription does not exist") };
+      case (?prescription) { prescription };
+    };
+
+    let updatedPrescription : Prescription = {
+      id;
+      patientId;
+      visitId;
+      prescriptionDate;
+      diagnosis;
+      medications;
+      notes;
+      createdAt = existingPrescription.createdAt;
+    };
+
+    prescriptions.add(id, updatedPrescription);
+    updatedPrescription;
+  };
+
+  public shared ({ caller }) func deletePrescription(id : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can delete prescriptions");
+    };
+    prescriptions.remove(id);
+  };
+};

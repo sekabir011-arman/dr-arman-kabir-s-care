@@ -1,0 +1,317 @@
+// Version: 1.0.0
+type AlertSeverity__963005291 = {#Critical; #Info; #Warning};
+type AlertType__122072705 =
+  {
+    #AKI;
+    #AllergyContraindication;
+    #CriticalLab;
+    #DrugInteraction;
+    #Hypotension;
+    #Hypoxia;
+    #Sepsis
+  };
+type AuditEntry__24563336 =
+  {
+    afterValue : Text;
+    beforeValue : ?Text;
+    changedAt : Int;
+    changedBy : Principal;
+    changedByName : Text;
+    changedByRole : StaffRole__87656655;
+    entityId : Nat;
+    entityType : Text;
+    fieldName : Text;
+    id : Nat;
+    ipAddress : ?Text;
+    reason : ?Text
+  };
+type BedRecord__90428469 =
+  {
+    admissionDate : ?Int;
+    bedNumber : Text;
+    dischargeDate : ?Int;
+    id : Nat;
+    patientId : ?Nat;
+    patientName : ?Text;
+    status : BedStatus__576751183;
+    transferHistory : [BedTransferEntry__726580843];
+    ward : Text
+  };
+type BedStatus__576751183 = {#Empty; #Maintenance; #Occupied};
+type BedTransferEntry__726580843 =
+  {date : Int; fromBed : Text; reason : Text; toBed : Text};
+type ClinicalAlert__620379123 =
+  {
+    acknowledgedAt : ?Int;
+    acknowledgedBy : ?Principal;
+    alertType : AlertType__122072705;
+    details : ?Text;
+    id : Nat;
+    isAcknowledged : Bool;
+    isResolved : Bool;
+    message : Text;
+    patientId : Nat;
+    resolvedAt : ?Int;
+    severity : AlertSeverity__963005291;
+    triggeredAt : Int;
+    triggeredBy : Text
+  };
+type ClinicalNote__118286836 =
+  {
+    authorId : Principal;
+    authorName : Text;
+    authorRole : StaffRole__87656655;
+    content : Text;
+    createdAt : Int;
+    encounterId : ?Nat;
+    id : Nat;
+    isDeleted : Bool;
+    isDraft : Bool;
+    noteSubtype : ?Text;
+    noteType : NoteType__332347553;
+    patientId : Nat;
+    previousVersionIds : [Nat];
+    versionInfo : VersionedRecord__27047174
+  };
+type ClinicalOrder__887323512 =
+  {
+    code : Text;
+    completedAt : ?Int;
+    description : Text;
+    encounterId : ?Nat;
+    id : Nat;
+    notes : ?Text;
+    orderType : OrderType__605123120;
+    orderedAt : Int;
+    orderedBy : Principal;
+    orderedByName : Text;
+    orderedByRole : StaffRole__87656655;
+    patientId : Nat;
+    result : ?Text;
+    status : OrderStatus__838615098;
+    versionInfo : VersionedRecord__27047174
+  };
+type Data__791452850<K, V> =
+  {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type DiagnosisTemplate__883104078 =
+  {
+    createdAt : Int;
+    createdBy : Principal;
+    defaultAdvice : [Text];
+    defaultAdviceBn : [Text];
+    defaultDrugs : [Text];
+    defaultInvestigations : [Text];
+    diagnosisName : Text;
+    diagnosisNameBn : ?Text;
+    icdCode : ?Text;
+    id : Nat;
+    isActive : Bool
+  };
+type EncounterStatus__434457795 =
+  {#Cancelled; #Completed; #InProgress; #Planned};
+type EncounterType__715502745 = {#Emergency; #FollowUp; #IPD; #OPD};
+type Encounter__298641220 =
+  {
+    encounterId : Text;
+    encounterType : EncounterType__715502745;
+    endDate : ?Int;
+    id : Nat;
+    locationNotes : ?Text;
+    patientId : Nat;
+    previousVersions : [VersionedRecord__27047174];
+    providerId : Principal;
+    providerName : Text;
+    startDate : Int;
+    status : EncounterStatus__434457795;
+    versionInfo : VersionedRecord__27047174
+  };
+type Gender__579703926 = {#female; #male; #other};
+type Int__270357528 = Int__616954475;
+type Int__616954475 = Int;
+type Internal__8484328<K, V> =
+  {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
+type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
+type Map__158565046<K, V> = Map__297112838<K, V>;
+type Map__297112838<K, V> =
+  {var root : Node__46230540<K, V>; var size : Nat__490723111};
+type Map__605269027<K, V> = Map__158565046<K, V>;
+type Medication__77603812 =
+  {
+    dose : Text;
+    duration : Text;
+    frequency : Text;
+    instructions : Text;
+    name : Text
+  };
+type Nat__490723111 = Nat__920180692;
+type Nat__920180692 = Nat;
+type Node__46230540<K, V> =
+  {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type NoteType__332347553 =
+  {#DailyProgress; #Discharge; #General; #Handover; #Nursing; #SOAP};
+type ObservationStatus__342199766 = {#Corrected; #Final; #Preliminary};
+type ObservationType__136978429 =
+  {#DrainMonitoring; #ExamFinding; #IntakeOutput; #Lab; #Vital};
+type Observation__633753642 =
+  {
+    code : Text;
+    encounterId : ?Nat;
+    id : Nat;
+    interpretation : ?Text;
+    isDeleted : Bool;
+    normalRange : ?Text;
+    numericValue : ?Float;
+    observationDate : Int;
+    observationType : ObservationType__136978429;
+    patientId : Nat;
+    recordedBy : Principal;
+    recordedByName : Text;
+    recordedByRole : StaffRole__87656655;
+    status : ObservationStatus__342199766;
+    unit : Text;
+    value : Text;
+    versionInfo : VersionedRecord__27047174
+  };
+type OrderStatus__838615098 =
+  {#Cancelled; #Completed; #InProgress; #Pending; #Requested};
+type OrderType__605123120 =
+  {#Investigation; #LabTest; #Medication; #Procedure};
+type PatientType__384173924 = {#admitted; #outdoor};
+type Patient__823362798 =
+  {
+    address : ?Text;
+    allergies : [Text];
+    bloodGroup : ?Text;
+    chronicConditions : [Text];
+    createdAt : Time__900049286;
+    dateOfBirth : ?Time__900049286;
+    email : ?Text;
+    fullName : Text;
+    gender : Gender__579703926;
+    height : ?Float;
+    id : Nat;
+    nameBn : ?Text;
+    pastSurgicalHistory : ?Text;
+    patientType : PatientType__384173924;
+    phone : ?Text;
+    weight : ?Float
+  };
+type Prescription__847157722 =
+  {
+    createdAt : Time__900049286;
+    diagnosis : ?Text;
+    id : Nat;
+    medications : [Medication__77603812];
+    notes : ?Text;
+    patientId : Nat;
+    prescriptionDate : Time__900049286;
+    visitId : ?Nat
+  };
+type StaffRole__87656655 =
+  {
+    #admin;
+    #consultant_doctor;
+    #doctor;
+    #intern_doctor;
+    #medical_officer;
+    #nurse;
+    #patient;
+    #staff
+  };
+type SyncRecord__825211546 =
+  {
+    deviceId : Text;
+    id : Nat;
+    lastEntityId : ?Nat;
+    lastEntityType : ?Text;
+    lastSyncAt : Int;
+    pendingChanges : Nat;
+    userId : Principal
+  };
+type Time__796480547 = Int__270357528;
+type Time__900049286 = Time__796480547;
+type UserProfile__491224006 = {name : Text};
+type UserRole__587919431 = {#admin; #guest; #user};
+type VersionedRecord__27047174 =
+  {
+    changeReason : ?Text;
+    createdAt : Int;
+    createdBy : Principal;
+    createdByName : Text;
+    createdByRole : StaffRole__87656655;
+    version : Nat
+  };
+type VisitType__1071834702 = {#admitted; #outdoor};
+type Visit__635288371 =
+  {
+    chiefComplaint : Text;
+    createdAt : Time__900049286;
+    diagnosis : ?Text;
+    historyOfPresentIllness : ?Text;
+    id : Nat;
+    notes : ?Text;
+    patientId : Nat;
+    physicalExamination : ?Text;
+    visitDate : Time__900049286;
+    visitType : VisitType__1071834702;
+    vitalSigns : VitalSigns__681997343
+  };
+type VitalSigns__681997343 =
+  {
+    bloodPressure : ?Text;
+    oxygenSaturation : ?Text;
+    pulse : ?Text;
+    respiratoryRate : ?Text;
+    temperature : ?Text
+  };
+actor {
+  stable accessControlState :
+    {
+      var adminAssigned : Bool;
+      userRoles : Map__605269027<Principal, UserRole__587919431>
+    };
+  stable clinicalEngineState :
+    {
+      var alertIdCounter : Nat;
+      alerts : Map__605269027<Nat, ClinicalAlert__620379123>;
+      auditEntries : Map__605269027<Nat, AuditEntry__24563336>;
+      var auditIdCounter : Nat;
+      var bedIdCounter : Nat;
+      beds : Map__605269027<Nat, BedRecord__90428469>;
+      var diagnosisTemplateIdCounter : Nat;
+      diagnosisTemplates : Map__605269027<Nat, DiagnosisTemplate__883104078>;
+      var encounterIdCounter : Nat;
+      encounters : Map__605269027<Nat, Encounter__298641220>;
+      var noteIdCounter : Nat;
+      notes : Map__605269027<Nat, ClinicalNote__118286836>;
+      var observationIdCounter : Nat;
+      observations : Map__605269027<Nat, Observation__633753642>;
+      var orderIdCounter : Nat;
+      orders : Map__605269027<Nat, ClinicalOrder__887323512>;
+      var syncRecordIdCounter : Nat;
+      syncRecords : Map__605269027<Text, SyncRecord__825211546>
+    };
+  stable var patientIdCounter : Nat;
+  stable patients :
+    {
+      var root : Node__46230540<Nat, Patient__823362798>;
+      var size : Nat__490723111
+    };
+  stable var prescriptionIdCounter : Nat;
+  stable prescriptions :
+    {
+      var root : Node__46230540<Nat, Prescription__847157722>;
+      var size : Nat__490723111
+    };
+  stable userProfiles :
+    {
+      var root : Node__46230540<Principal, UserProfile__491224006>;
+      var size : Nat__490723111
+    };
+  stable var visitIdCounter : Nat;
+  stable visits :
+    {
+      var root : Node__46230540<Nat, Visit__635288371>;
+      var size : Nat__490723111
+    }
+};
