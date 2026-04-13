@@ -13,7 +13,9 @@ import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 import ClinicalDataEngineLib "lib/clinical-data-engine";
 import ClinicalDataEngineMixin "mixins/clinical-data-engine-api";
+import Migration "migration";
 
+(with migration = Migration.run)
 actor {
   ///////////////////////////////
   // Custom Types and Modules  //
@@ -56,6 +58,8 @@ actor {
     pastSurgicalHistory : ?Text;
     patientType : PatientType;
     createdAt : Time.Time;
+    consultantEmail : ?Text;
+    consultantName : ?Text;
   };
 
   module Patient {
@@ -183,7 +187,9 @@ actor {
     allergies : [Text],
     chronicConditions : [Text],
     pastSurgicalHistory : ?Text,
-    patientType : PatientType
+    patientType : PatientType,
+    consultantEmail : ?Text,
+    consultantName : ?Text
   ) : async Patient {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can create patients");
@@ -206,6 +212,8 @@ actor {
       pastSurgicalHistory;
       patientType;
       createdAt = Time.now();
+      consultantEmail;
+      consultantName;
     };
 
     patients.add(patientIdCounter, patient);
@@ -242,7 +250,9 @@ actor {
     allergies : [Text],
     chronicConditions : [Text],
     pastSurgicalHistory : ?Text,
-    patientType : PatientType
+    patientType : PatientType,
+    consultantEmail : ?Text,
+    consultantName : ?Text
   ) : async Patient {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can update patients");
@@ -270,9 +280,35 @@ actor {
       pastSurgicalHistory;
       patientType;
       createdAt = existingPatient.createdAt;
+      consultantEmail;
+      consultantName;
     };
 
     patients.add(id, updatedPatient);
+    updatedPatient;
+  };
+
+  public shared ({ caller }) func assignConsultant(
+    patientId : Nat,
+    consultantEmail : Text,
+    consultantName : Text
+  ) : async Patient {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can assign consultants");
+    };
+
+    let existingPatient = switch (patients.get(patientId)) {
+      case (null) { Runtime.trap("Patient does not exist") };
+      case (?patient) { patient };
+    };
+
+    let updatedPatient : Patient = {
+      existingPatient with
+      consultantEmail = ?consultantEmail;
+      consultantName = ?consultantName;
+    };
+
+    patients.add(patientId, updatedPatient);
     updatedPatient;
   };
 

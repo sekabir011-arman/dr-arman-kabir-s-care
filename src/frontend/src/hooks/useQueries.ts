@@ -1240,6 +1240,12 @@ export function useAdmitPatient() {
       carriedOverDrugHistory: string[];
       carriedOverPrescriptions: string[];
       isIntern: boolean;
+      consultantAssignment?: {
+        email: string;
+        name: string;
+        assignedAt: string;
+        assignedBy: string;
+      };
     }) => {
       // 1. Update patient record
       const key = storageKey("patients");
@@ -1255,6 +1261,9 @@ export function useAdmitPatient() {
               admittedOn: data.admittedOn,
               isAdmitted: true,
               patientType: "admitted" as Patient["patientType"],
+              ...(data.consultantAssignment
+                ? { consultantAssignment: data.consultantAssignment }
+                : {}),
             }
           : p,
       );
@@ -1282,6 +1291,9 @@ export function useAdmitPatient() {
         dischargedOn: null,
         status: "active",
         createdAt: new Date().toISOString(),
+        ...(data.consultantAssignment
+          ? { consultantAssignment: data.consultantAssignment }
+          : {}),
       };
       const existing = loadAdmissionHistory(data.patientId);
       saveAdmissionHistory(data.patientId, [...existing, newRecord]);
@@ -1299,7 +1311,7 @@ export function useAdmitPatient() {
         changedByName: data.admittedBy,
         changedByRole: data.admittedByRole as import("../types").StaffRole,
         changedAt: BigInt(Date.now()) * 1_000_000n,
-        reason: `Admitted to ${data.hospitalName} — ${data.ward}, Bed ${data.bed}`,
+        reason: `Admitted to ${data.hospitalName} — ${data.ward}, Bed ${data.bed}${data.consultantAssignment ? `. Assigned to Dr. ${data.consultantAssignment.name}` : ""}`,
       };
       saveClinicalEntities("auditTrail", [...auditAll, newAuditEntry]);
 
@@ -1654,4 +1666,92 @@ export function setPrescriptionHeaderImage(
   const email = doctorEmail ?? getDoctorEmail();
   const key = `prescriptionHeaders_${type}_${email}`;
   localStorage.setItem(key, imageDataUrl);
+}
+
+// ── Consultant Reassignment ───────────────────────────────────────────────────
+
+export function useReassignConsultant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      patientId: bigint;
+      newConsultant: { email: string; name: string };
+      assignedBy: string; // email of the person making the change
+      assignedByName: string;
+      assignedByRole: StaffRole;
+    }) => {
+      const assignment = {
+        email: data.newConsultant.email,
+        name: data.newConsultant.name,
+        assignedAt: new Date().toISOString(),
+        assignedBy: data.assignedBy,
+      };
+
+      // 1. Update patient record across all doctor storage keys
+      let previousConsultantName: string | undefined;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith("patients_")) {
+          try {
+            const raw = localStorage.getItem(key);
+            if (!raw) continue;
+            const patients = deserializeBigInt(JSON.parse(raw)) as Patient[];
+            if (!Array.isArray(patients)) continue;
+            const idx = patients.findIndex((p) => p.id === data.patientId);
+            if (idx >= 0) {
+              const prev = patients[idx].consultantAssignment;
+              if (prev && !previousConsultantName)
+                previousConsultantName = prev.name;
+              patients[idx] = {
+                ...patients[idx],
+                consultantAssignment: assignment,
+              };
+              localStorage.setItem(
+                key,
+                JSON.stringify(serializeBigInt(patients)),
+              );
+            }
+          } catch {}
+        }
+      }
+
+      // 2. Update active admission history
+      const admissions = loadAdmissionHistory(data.patientId);
+      const updatedAdmissions = admissions.map((a) =>
+        a.status === "active" ? { ...a, consultantAssignment: assignment } : a,
+      );
+      saveAdmissionHistory(data.patientId, updatedAdmissions);
+
+      // 3. Write to audit trail
+      const auditAll = getClinicalEntities<AuditEntry>("auditTrail");
+      const entry: AuditEntry = {
+        id: nextClinicalId(auditAll),
+        entityType: "Patient",
+        entityId: data.patientId,
+        fieldName: "consultantAssignment",
+        beforeValue: previousConsultantName ?? "None",
+        afterValue: data.newConsultant.name,
+        changedBy: { toString: () => "local" } as unknown as Principal,
+        changedByName: data.assignedByName,
+        changedByRole: data.assignedByRole,
+        changedAt: BigInt(Date.now()) * 1_000_000n,
+        reason: `Consultant reassigned from ${previousConsultantName ?? "None"} to ${data.newConsultant.name} by ${data.assignedByName}`,
+      };
+      saveClinicalEntities("auditTrail", [...auditAll, entry]);
+
+      return assignment;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["patients"] });
+      qc.invalidateQueries({
+        queryKey: ["patient", vars.patientId.toString()],
+      });
+      qc.invalidateQueries({
+        queryKey: ["admissionHistory", vars.patientId.toString()],
+      });
+      qc.invalidateQueries({
+        queryKey: ["auditTrail", vars.patientId.toString()],
+      });
+    },
+  });
 }

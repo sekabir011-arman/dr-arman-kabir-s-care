@@ -7,6 +7,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  LayoutDashboard,
   Loader2,
   Menu,
   Pill,
@@ -36,6 +37,7 @@ interface LayoutProps {
 }
 
 const baseNavigation = [
+  { name: "Dashboard", href: "/Dashboard", icon: LayoutDashboard },
   { name: "Patients", href: "/Patients", icon: Users },
   { name: "Appointments", href: "/Appointments", icon: CalendarDays },
   { name: "Settings", href: "/Settings", icon: UserCircle },
@@ -195,12 +197,18 @@ export default function Layout({ children, currentPageName }: LayoutProps) {
     : "";
 
   const isActive = (name: string) => {
+    if (name === "Dashboard") {
+      return (
+        currentPageName === "Dashboard" ||
+        pathname === "/" ||
+        pathname === "/Dashboard"
+      );
+    }
     if (name === "Patients") {
       return (
         currentPageName === "Patients" ||
         currentPageName === "PatientProfile" ||
         currentPageName === "PatientDashboard" ||
-        pathname === "/" ||
         pathname === "/Patients"
       );
     }

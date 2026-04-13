@@ -57,6 +57,7 @@ import { setCanisterActor } from "./hooks/useQueries";
 import Appointments from "./pages/Appointments";
 import AuditLog from "./pages/AuditLog";
 import BedManagement from "./pages/BedManagement";
+import Dashboard from "./pages/Dashboard";
 import LandingPage from "./pages/LandingPage";
 import PatientDashboard from "./pages/PatientDashboard";
 import Patients from "./pages/Patients";
@@ -74,11 +75,13 @@ function RootLayoutComponent() {
   const currentPageName =
     pathname === "/" || pathname === "/Patients"
       ? "Patients"
-      : pathname === "/Appointments"
-        ? "Appointments"
-        : pathname === "/AuditLog"
-          ? "AuditLog"
-          : pathname.replace(/^\//, "");
+      : pathname === "/Dashboard"
+        ? "Dashboard"
+        : pathname === "/Appointments"
+          ? "Appointments"
+          : pathname === "/AuditLog"
+            ? "AuditLog"
+            : pathname.replace(/^\//, "");
   return (
     <Layout currentPageName={currentPageName}>
       <Outlet />
@@ -90,7 +93,12 @@ const rootRoute = createRootRoute({ component: RootLayoutComponent });
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: Patients,
+  component: Dashboard,
+});
+const dashboardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/Dashboard",
+  component: Dashboard,
 });
 const patientsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -130,6 +138,7 @@ const bedManagementRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  dashboardRoute,
   patientsRoute,
   patientProfileRoute,
   settingsRoute,

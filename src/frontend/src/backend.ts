@@ -139,7 +139,9 @@ export interface Patient {
     id: bigint;
     weight?: number;
     height?: number;
+    consultantEmail?: string;
     nameBn?: string;
+    consultantName?: string;
     dateOfBirth?: Time;
     createdAt: Time;
     fullName: string;
@@ -406,6 +408,7 @@ export interface backendInterface {
         err: string;
     }>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    assignConsultant(patientId: bigint, consultantEmail: string, consultantName: string): Promise<Patient>;
     createBedRecord(bedNumber: string, ward: string): Promise<{
         __kind__: "ok";
         ok: BedRecord;
@@ -455,7 +458,7 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
-    createPatient(fullName: string, nameBn: string | null, dateOfBirth: Time | null, gender: Gender, phone: string | null, email: string | null, address: string | null, bloodGroup: string | null, weight: number | null, height: number | null, allergies: Array<string>, chronicConditions: Array<string>, pastSurgicalHistory: string | null, patientType: PatientType): Promise<Patient>;
+    createPatient(fullName: string, nameBn: string | null, dateOfBirth: Time | null, gender: Gender, phone: string | null, email: string | null, address: string | null, bloodGroup: string | null, weight: number | null, height: number | null, allergies: Array<string>, chronicConditions: Array<string>, pastSurgicalHistory: string | null, patientType: PatientType, consultantEmail: string | null, consultantName: string | null): Promise<Patient>;
     createPrescription(patientId: bigint, visitId: bigint | null, prescriptionDate: Time, diagnosis: string | null, medications: Array<Medication>, notes: string | null): Promise<Prescription>;
     createVisit(patientId: bigint, visitDate: Time, chiefComplaint: string, historyOfPresentIllness: string | null, vitalSigns: VitalSigns, physicalExamination: string | null, diagnosis: string | null, notes: string | null, visitType: VisitType): Promise<Visit>;
     deletePatient(id: bigint): Promise<void>;
@@ -557,7 +560,7 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
-    updatePatient(id: bigint, fullName: string, nameBn: string | null, dateOfBirth: Time | null, gender: Gender, phone: string | null, email: string | null, address: string | null, bloodGroup: string | null, weight: number | null, height: number | null, allergies: Array<string>, chronicConditions: Array<string>, pastSurgicalHistory: string | null, patientType: PatientType): Promise<Patient>;
+    updatePatient(id: bigint, fullName: string, nameBn: string | null, dateOfBirth: Time | null, gender: Gender, phone: string | null, email: string | null, address: string | null, bloodGroup: string | null, weight: number | null, height: number | null, allergies: Array<string>, chronicConditions: Array<string>, pastSurgicalHistory: string | null, patientType: PatientType, consultantEmail: string | null, consultantName: string | null): Promise<Patient>;
     updatePrescription(id: bigint, patientId: bigint, visitId: bigint | null, prescriptionDate: Time, diagnosis: string | null, medications: Array<Medication>, notes: string | null): Promise<Prescription>;
     updateVisit(id: bigint, patientId: bigint, visitDate: Time, chiefComplaint: string, historyOfPresentIllness: string | null, vitalSigns: VitalSigns, physicalExamination: string | null, diagnosis: string | null, notes: string | null, visitType: VisitType): Promise<Visit>;
 }
@@ -652,6 +655,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async assignConsultant(arg0: bigint, arg1: string, arg2: string): Promise<Patient> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.assignConsultant(arg0, arg1, arg2);
+                return from_candid_Patient_n31(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.assignConsultant(arg0, arg1, arg2);
+            return from_candid_Patient_n31(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async createBedRecord(arg0: string, arg1: string): Promise<{
         __kind__: "ok";
         ok: BedRecord;
@@ -681,14 +698,14 @@ export class Backend implements backendInterface {
     }> {
         if (this.processError) {
             try {
-                const result = await this.actor.createClinicalAlert(arg0, to_candid_AlertType_n31(this._uploadFile, this._downloadFile, arg1), to_candid_AlertSeverity_n33(this._uploadFile, this._downloadFile, arg2), arg3, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg4));
+                const result = await this.actor.createClinicalAlert(arg0, to_candid_AlertType_n38(this._uploadFile, this._downloadFile, arg1), to_candid_AlertSeverity_n40(this._uploadFile, this._downloadFile, arg2), arg3, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg4));
                 return from_candid_variant_n1(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createClinicalAlert(arg0, to_candid_AlertType_n31(this._uploadFile, this._downloadFile, arg1), to_candid_AlertSeverity_n33(this._uploadFile, this._downloadFile, arg2), arg3, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg4));
+            const result = await this.actor.createClinicalAlert(arg0, to_candid_AlertType_n38(this._uploadFile, this._downloadFile, arg1), to_candid_AlertSeverity_n40(this._uploadFile, this._downloadFile, arg2), arg3, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg4));
             return from_candid_variant_n1(this._uploadFile, this._downloadFile, result);
         }
     }
@@ -701,15 +718,15 @@ export class Backend implements backendInterface {
     }> {
         if (this.processError) {
             try {
-                const result = await this.actor.createClinicalNote(arg0, to_candid_opt_n36(this._uploadFile, this._downloadFile, arg1), to_candid_NoteType_n37(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg3), arg4, arg5);
-                return from_candid_variant_n39(this._uploadFile, this._downloadFile, result);
+                const result = await this.actor.createClinicalNote(arg0, to_candid_opt_n43(this._uploadFile, this._downloadFile, arg1), to_candid_NoteType_n44(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg3), arg4, arg5);
+                return from_candid_variant_n46(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createClinicalNote(arg0, to_candid_opt_n36(this._uploadFile, this._downloadFile, arg1), to_candid_NoteType_n37(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg3), arg4, arg5);
-            return from_candid_variant_n39(this._uploadFile, this._downloadFile, result);
+            const result = await this.actor.createClinicalNote(arg0, to_candid_opt_n43(this._uploadFile, this._downloadFile, arg1), to_candid_NoteType_n44(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg3), arg4, arg5);
+            return from_candid_variant_n46(this._uploadFile, this._downloadFile, result);
         }
     }
     async createDiagnosisTemplate(arg0: string, arg1: string | null, arg2: string | null, arg3: Array<string>, arg4: Array<string>, arg5: Array<string>, arg6: Array<string>): Promise<{
@@ -721,15 +738,15 @@ export class Backend implements backendInterface {
     }> {
         if (this.processError) {
             try {
-                const result = await this.actor.createDiagnosisTemplate(arg0, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg2), arg3, arg4, arg5, arg6);
-                return from_candid_variant_n44(this._uploadFile, this._downloadFile, result);
+                const result = await this.actor.createDiagnosisTemplate(arg0, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg2), arg3, arg4, arg5, arg6);
+                return from_candid_variant_n51(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createDiagnosisTemplate(arg0, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg2), arg3, arg4, arg5, arg6);
-            return from_candid_variant_n44(this._uploadFile, this._downloadFile, result);
+            const result = await this.actor.createDiagnosisTemplate(arg0, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg2), arg3, arg4, arg5, arg6);
+            return from_candid_variant_n51(this._uploadFile, this._downloadFile, result);
         }
     }
     async createEncounter(arg0: bigint, arg1: EncounterType, arg2: string | null): Promise<{
@@ -741,15 +758,15 @@ export class Backend implements backendInterface {
     }> {
         if (this.processError) {
             try {
-                const result = await this.actor.createEncounter(arg0, to_candid_EncounterType_n47(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg2));
-                return from_candid_variant_n49(this._uploadFile, this._downloadFile, result);
+                const result = await this.actor.createEncounter(arg0, to_candid_EncounterType_n54(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg2));
+                return from_candid_variant_n56(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createEncounter(arg0, to_candid_EncounterType_n47(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg2));
-            return from_candid_variant_n49(this._uploadFile, this._downloadFile, result);
+            const result = await this.actor.createEncounter(arg0, to_candid_EncounterType_n54(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg2));
+            return from_candid_variant_n56(this._uploadFile, this._downloadFile, result);
         }
     }
     async createObservation(arg0: bigint, arg1: bigint | null, arg2: ObservationType, arg3: string, arg4: string, arg5: number | null, arg6: string, arg7: string | null, arg8: string | null, arg9: bigint): Promise<{
@@ -761,14 +778,14 @@ export class Backend implements backendInterface {
     }> {
         if (this.processError) {
             try {
-                const result = await this.actor.createObservation(arg0, to_candid_opt_n36(this._uploadFile, this._downloadFile, arg1), to_candid_ObservationType_n57(this._uploadFile, this._downloadFile, arg2), arg3, arg4, to_candid_opt_n59(this._uploadFile, this._downloadFile, arg5), arg6, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg8), arg9);
+                const result = await this.actor.createObservation(arg0, to_candid_opt_n43(this._uploadFile, this._downloadFile, arg1), to_candid_ObservationType_n64(this._uploadFile, this._downloadFile, arg2), arg3, arg4, to_candid_opt_n66(this._uploadFile, this._downloadFile, arg5), arg6, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg8), arg9);
                 return from_candid_variant_n11(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createObservation(arg0, to_candid_opt_n36(this._uploadFile, this._downloadFile, arg1), to_candid_ObservationType_n57(this._uploadFile, this._downloadFile, arg2), arg3, arg4, to_candid_opt_n59(this._uploadFile, this._downloadFile, arg5), arg6, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg8), arg9);
+            const result = await this.actor.createObservation(arg0, to_candid_opt_n43(this._uploadFile, this._downloadFile, arg1), to_candid_ObservationType_n64(this._uploadFile, this._downloadFile, arg2), arg3, arg4, to_candid_opt_n66(this._uploadFile, this._downloadFile, arg5), arg6, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg8), arg9);
             return from_candid_variant_n11(this._uploadFile, this._downloadFile, result);
         }
     }
@@ -781,56 +798,56 @@ export class Backend implements backendInterface {
     }> {
         if (this.processError) {
             try {
-                const result = await this.actor.createOrder(arg0, to_candid_opt_n36(this._uploadFile, this._downloadFile, arg1), to_candid_OrderType_n60(this._uploadFile, this._downloadFile, arg2), arg3, arg4, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg5));
-                return from_candid_variant_n62(this._uploadFile, this._downloadFile, result);
+                const result = await this.actor.createOrder(arg0, to_candid_opt_n43(this._uploadFile, this._downloadFile, arg1), to_candid_OrderType_n67(this._uploadFile, this._downloadFile, arg2), arg3, arg4, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg5));
+                return from_candid_variant_n69(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createOrder(arg0, to_candid_opt_n36(this._uploadFile, this._downloadFile, arg1), to_candid_OrderType_n60(this._uploadFile, this._downloadFile, arg2), arg3, arg4, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg5));
-            return from_candid_variant_n62(this._uploadFile, this._downloadFile, result);
+            const result = await this.actor.createOrder(arg0, to_candid_opt_n43(this._uploadFile, this._downloadFile, arg1), to_candid_OrderType_n67(this._uploadFile, this._downloadFile, arg2), arg3, arg4, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg5));
+            return from_candid_variant_n69(this._uploadFile, this._downloadFile, result);
         }
     }
-    async createPatient(arg0: string, arg1: string | null, arg2: Time | null, arg3: Gender, arg4: string | null, arg5: string | null, arg6: string | null, arg7: string | null, arg8: number | null, arg9: number | null, arg10: Array<string>, arg11: Array<string>, arg12: string | null, arg13: PatientType): Promise<Patient> {
+    async createPatient(arg0: string, arg1: string | null, arg2: Time | null, arg3: Gender, arg4: string | null, arg5: string | null, arg6: string | null, arg7: string | null, arg8: number | null, arg9: number | null, arg10: Array<string>, arg11: Array<string>, arg12: string | null, arg13: PatientType, arg14: string | null, arg15: string | null): Promise<Patient> {
         if (this.processError) {
             try {
-                const result = await this.actor.createPatient(arg0, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n69(this._uploadFile, this._downloadFile, arg2), to_candid_Gender_n70(this._uploadFile, this._downloadFile, arg3), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg4), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n59(this._uploadFile, this._downloadFile, arg8), to_candid_opt_n59(this._uploadFile, this._downloadFile, arg9), arg10, arg11, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg12), to_candid_PatientType_n72(this._uploadFile, this._downloadFile, arg13));
-                return from_candid_Patient_n74(this._uploadFile, this._downloadFile, result);
+                const result = await this.actor.createPatient(arg0, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n76(this._uploadFile, this._downloadFile, arg2), to_candid_Gender_n77(this._uploadFile, this._downloadFile, arg3), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg4), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n66(this._uploadFile, this._downloadFile, arg8), to_candid_opt_n66(this._uploadFile, this._downloadFile, arg9), arg10, arg11, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg12), to_candid_PatientType_n79(this._uploadFile, this._downloadFile, arg13), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg14), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg15));
+                return from_candid_Patient_n31(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createPatient(arg0, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n69(this._uploadFile, this._downloadFile, arg2), to_candid_Gender_n70(this._uploadFile, this._downloadFile, arg3), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg4), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n59(this._uploadFile, this._downloadFile, arg8), to_candid_opt_n59(this._uploadFile, this._downloadFile, arg9), arg10, arg11, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg12), to_candid_PatientType_n72(this._uploadFile, this._downloadFile, arg13));
-            return from_candid_Patient_n74(this._uploadFile, this._downloadFile, result);
+            const result = await this.actor.createPatient(arg0, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n76(this._uploadFile, this._downloadFile, arg2), to_candid_Gender_n77(this._uploadFile, this._downloadFile, arg3), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg4), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n66(this._uploadFile, this._downloadFile, arg8), to_candid_opt_n66(this._uploadFile, this._downloadFile, arg9), arg10, arg11, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg12), to_candid_PatientType_n79(this._uploadFile, this._downloadFile, arg13), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg14), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg15));
+            return from_candid_Patient_n31(this._uploadFile, this._downloadFile, result);
         }
     }
     async createPrescription(arg0: bigint, arg1: bigint | null, arg2: Time, arg3: string | null, arg4: Array<Medication>, arg5: string | null): Promise<Prescription> {
         if (this.processError) {
             try {
-                const result = await this.actor.createPrescription(arg0, to_candid_opt_n36(this._uploadFile, this._downloadFile, arg1), arg2, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg3), arg4, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg5));
+                const result = await this.actor.createPrescription(arg0, to_candid_opt_n43(this._uploadFile, this._downloadFile, arg1), arg2, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg3), arg4, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg5));
                 return from_candid_Prescription_n81(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createPrescription(arg0, to_candid_opt_n36(this._uploadFile, this._downloadFile, arg1), arg2, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg3), arg4, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg5));
+            const result = await this.actor.createPrescription(arg0, to_candid_opt_n43(this._uploadFile, this._downloadFile, arg1), arg2, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg3), arg4, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg5));
             return from_candid_Prescription_n81(this._uploadFile, this._downloadFile, result);
         }
     }
     async createVisit(arg0: bigint, arg1: Time, arg2: string, arg3: string | null, arg4: VitalSigns, arg5: string | null, arg6: string | null, arg7: string | null, arg8: VisitType): Promise<Visit> {
         if (this.processError) {
             try {
-                const result = await this.actor.createVisit(arg0, arg1, arg2, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg3), to_candid_VitalSigns_n83(this._uploadFile, this._downloadFile, arg4), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg7), to_candid_VisitType_n85(this._uploadFile, this._downloadFile, arg8));
+                const result = await this.actor.createVisit(arg0, arg1, arg2, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg3), to_candid_VitalSigns_n83(this._uploadFile, this._downloadFile, arg4), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg7), to_candid_VisitType_n85(this._uploadFile, this._downloadFile, arg8));
                 return from_candid_Visit_n86(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createVisit(arg0, arg1, arg2, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg3), to_candid_VitalSigns_n83(this._uploadFile, this._downloadFile, arg4), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg7), to_candid_VisitType_n85(this._uploadFile, this._downloadFile, arg8));
+            const result = await this.actor.createVisit(arg0, arg1, arg2, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg3), to_candid_VitalSigns_n83(this._uploadFile, this._downloadFile, arg4), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg7), to_candid_VisitType_n85(this._uploadFile, this._downloadFile, arg8));
             return from_candid_Visit_n86(this._uploadFile, this._downloadFile, result);
         }
     }
@@ -1095,14 +1112,14 @@ export class Backend implements backendInterface {
     async getClinicalNotesByType(arg0: bigint, arg1: NoteType): Promise<Array<ClinicalNote>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getClinicalNotesByType(arg0, to_candid_NoteType_n37(this._uploadFile, this._downloadFile, arg1));
+                const result = await this.actor.getClinicalNotesByType(arg0, to_candid_NoteType_n44(this._uploadFile, this._downloadFile, arg1));
                 return from_candid_vec_n105(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getClinicalNotesByType(arg0, to_candid_NoteType_n37(this._uploadFile, this._downloadFile, arg1));
+            const result = await this.actor.getClinicalNotesByType(arg0, to_candid_NoteType_n44(this._uploadFile, this._downloadFile, arg1));
             return from_candid_vec_n105(this._uploadFile, this._downloadFile, result);
         }
     }
@@ -1179,14 +1196,14 @@ export class Backend implements backendInterface {
     async getObservationsByType(arg0: bigint, arg1: ObservationType): Promise<Array<Observation>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getObservationsByType(arg0, to_candid_ObservationType_n57(this._uploadFile, this._downloadFile, arg1));
+                const result = await this.actor.getObservationsByType(arg0, to_candid_ObservationType_n64(this._uploadFile, this._downloadFile, arg1));
                 return from_candid_vec_n109(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getObservationsByType(arg0, to_candid_ObservationType_n57(this._uploadFile, this._downloadFile, arg1));
+            const result = await this.actor.getObservationsByType(arg0, to_candid_ObservationType_n64(this._uploadFile, this._downloadFile, arg1));
             return from_candid_vec_n109(this._uploadFile, this._downloadFile, result);
         }
     }
@@ -1447,15 +1464,15 @@ export class Backend implements backendInterface {
     }> {
         if (this.processError) {
             try {
-                const result = await this.actor.updateClinicalNote(arg0, arg1, arg2, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg3));
-                return from_candid_variant_n39(this._uploadFile, this._downloadFile, result);
+                const result = await this.actor.updateClinicalNote(arg0, arg1, arg2, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg3));
+                return from_candid_variant_n46(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.updateClinicalNote(arg0, arg1, arg2, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg3));
-            return from_candid_variant_n39(this._uploadFile, this._downloadFile, result);
+            const result = await this.actor.updateClinicalNote(arg0, arg1, arg2, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg3));
+            return from_candid_variant_n46(this._uploadFile, this._downloadFile, result);
         }
     }
     async updateDiagnosisTemplate(arg0: bigint, arg1: string, arg2: string | null, arg3: string | null, arg4: Array<string>, arg5: Array<string>, arg6: Array<string>, arg7: Array<string>): Promise<{
@@ -1467,15 +1484,15 @@ export class Backend implements backendInterface {
     }> {
         if (this.processError) {
             try {
-                const result = await this.actor.updateDiagnosisTemplate(arg0, arg1, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg3), arg4, arg5, arg6, arg7);
-                return from_candid_variant_n44(this._uploadFile, this._downloadFile, result);
+                const result = await this.actor.updateDiagnosisTemplate(arg0, arg1, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg3), arg4, arg5, arg6, arg7);
+                return from_candid_variant_n51(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.updateDiagnosisTemplate(arg0, arg1, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg3), arg4, arg5, arg6, arg7);
-            return from_candid_variant_n44(this._uploadFile, this._downloadFile, result);
+            const result = await this.actor.updateDiagnosisTemplate(arg0, arg1, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg3), arg4, arg5, arg6, arg7);
+            return from_candid_variant_n51(this._uploadFile, this._downloadFile, result);
         }
     }
     async updateEncounter(arg0: bigint, arg1: bigint, arg2: EncounterStatus, arg3: bigint | null, arg4: string | null): Promise<{
@@ -1487,15 +1504,15 @@ export class Backend implements backendInterface {
     }> {
         if (this.processError) {
             try {
-                const result = await this.actor.updateEncounter(arg0, arg1, to_candid_EncounterStatus_n117(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n119(this._uploadFile, this._downloadFile, arg3), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg4));
-                return from_candid_variant_n49(this._uploadFile, this._downloadFile, result);
+                const result = await this.actor.updateEncounter(arg0, arg1, to_candid_EncounterStatus_n117(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n119(this._uploadFile, this._downloadFile, arg3), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg4));
+                return from_candid_variant_n56(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.updateEncounter(arg0, arg1, to_candid_EncounterStatus_n117(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n119(this._uploadFile, this._downloadFile, arg3), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg4));
-            return from_candid_variant_n49(this._uploadFile, this._downloadFile, result);
+            const result = await this.actor.updateEncounter(arg0, arg1, to_candid_EncounterStatus_n117(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n119(this._uploadFile, this._downloadFile, arg3), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg4));
+            return from_candid_variant_n56(this._uploadFile, this._downloadFile, result);
         }
     }
     async updateOrderStatus(arg0: bigint, arg1: OrderStatus, arg2: string | null, arg3: bigint | null): Promise<{
@@ -1507,56 +1524,56 @@ export class Backend implements backendInterface {
     }> {
         if (this.processError) {
             try {
-                const result = await this.actor.updateOrderStatus(arg0, to_candid_OrderStatus_n120(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n119(this._uploadFile, this._downloadFile, arg3));
-                return from_candid_variant_n62(this._uploadFile, this._downloadFile, result);
+                const result = await this.actor.updateOrderStatus(arg0, to_candid_OrderStatus_n120(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n119(this._uploadFile, this._downloadFile, arg3));
+                return from_candid_variant_n69(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.updateOrderStatus(arg0, to_candid_OrderStatus_n120(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n119(this._uploadFile, this._downloadFile, arg3));
-            return from_candid_variant_n62(this._uploadFile, this._downloadFile, result);
+            const result = await this.actor.updateOrderStatus(arg0, to_candid_OrderStatus_n120(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n119(this._uploadFile, this._downloadFile, arg3));
+            return from_candid_variant_n69(this._uploadFile, this._downloadFile, result);
         }
     }
-    async updatePatient(arg0: bigint, arg1: string, arg2: string | null, arg3: Time | null, arg4: Gender, arg5: string | null, arg6: string | null, arg7: string | null, arg8: string | null, arg9: number | null, arg10: number | null, arg11: Array<string>, arg12: Array<string>, arg13: string | null, arg14: PatientType): Promise<Patient> {
+    async updatePatient(arg0: bigint, arg1: string, arg2: string | null, arg3: Time | null, arg4: Gender, arg5: string | null, arg6: string | null, arg7: string | null, arg8: string | null, arg9: number | null, arg10: number | null, arg11: Array<string>, arg12: Array<string>, arg13: string | null, arg14: PatientType, arg15: string | null, arg16: string | null): Promise<Patient> {
         if (this.processError) {
             try {
-                const result = await this.actor.updatePatient(arg0, arg1, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n69(this._uploadFile, this._downloadFile, arg3), to_candid_Gender_n70(this._uploadFile, this._downloadFile, arg4), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg8), to_candid_opt_n59(this._uploadFile, this._downloadFile, arg9), to_candid_opt_n59(this._uploadFile, this._downloadFile, arg10), arg11, arg12, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg13), to_candid_PatientType_n72(this._uploadFile, this._downloadFile, arg14));
-                return from_candid_Patient_n74(this._uploadFile, this._downloadFile, result);
+                const result = await this.actor.updatePatient(arg0, arg1, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n76(this._uploadFile, this._downloadFile, arg3), to_candid_Gender_n77(this._uploadFile, this._downloadFile, arg4), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg8), to_candid_opt_n66(this._uploadFile, this._downloadFile, arg9), to_candid_opt_n66(this._uploadFile, this._downloadFile, arg10), arg11, arg12, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg13), to_candid_PatientType_n79(this._uploadFile, this._downloadFile, arg14), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg15), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg16));
+                return from_candid_Patient_n31(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.updatePatient(arg0, arg1, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n69(this._uploadFile, this._downloadFile, arg3), to_candid_Gender_n70(this._uploadFile, this._downloadFile, arg4), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg8), to_candid_opt_n59(this._uploadFile, this._downloadFile, arg9), to_candid_opt_n59(this._uploadFile, this._downloadFile, arg10), arg11, arg12, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg13), to_candid_PatientType_n72(this._uploadFile, this._downloadFile, arg14));
-            return from_candid_Patient_n74(this._uploadFile, this._downloadFile, result);
+            const result = await this.actor.updatePatient(arg0, arg1, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n76(this._uploadFile, this._downloadFile, arg3), to_candid_Gender_n77(this._uploadFile, this._downloadFile, arg4), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg8), to_candid_opt_n66(this._uploadFile, this._downloadFile, arg9), to_candid_opt_n66(this._uploadFile, this._downloadFile, arg10), arg11, arg12, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg13), to_candid_PatientType_n79(this._uploadFile, this._downloadFile, arg14), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg15), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg16));
+            return from_candid_Patient_n31(this._uploadFile, this._downloadFile, result);
         }
     }
     async updatePrescription(arg0: bigint, arg1: bigint, arg2: bigint | null, arg3: Time, arg4: string | null, arg5: Array<Medication>, arg6: string | null): Promise<Prescription> {
         if (this.processError) {
             try {
-                const result = await this.actor.updatePrescription(arg0, arg1, to_candid_opt_n36(this._uploadFile, this._downloadFile, arg2), arg3, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg4), arg5, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg6));
+                const result = await this.actor.updatePrescription(arg0, arg1, to_candid_opt_n43(this._uploadFile, this._downloadFile, arg2), arg3, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg4), arg5, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg6));
                 return from_candid_Prescription_n81(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.updatePrescription(arg0, arg1, to_candid_opt_n36(this._uploadFile, this._downloadFile, arg2), arg3, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg4), arg5, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg6));
+            const result = await this.actor.updatePrescription(arg0, arg1, to_candid_opt_n43(this._uploadFile, this._downloadFile, arg2), arg3, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg4), arg5, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg6));
             return from_candid_Prescription_n81(this._uploadFile, this._downloadFile, result);
         }
     }
     async updateVisit(arg0: bigint, arg1: bigint, arg2: Time, arg3: string, arg4: string | null, arg5: VitalSigns, arg6: string | null, arg7: string | null, arg8: string | null, arg9: VisitType): Promise<Visit> {
         if (this.processError) {
             try {
-                const result = await this.actor.updateVisit(arg0, arg1, arg2, arg3, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg4), to_candid_VitalSigns_n83(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg8), to_candid_VisitType_n85(this._uploadFile, this._downloadFile, arg9));
+                const result = await this.actor.updateVisit(arg0, arg1, arg2, arg3, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg4), to_candid_VitalSigns_n83(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg8), to_candid_VisitType_n85(this._uploadFile, this._downloadFile, arg9));
                 return from_candid_Visit_n86(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.updateVisit(arg0, arg1, arg2, arg3, to_candid_opt_n35(this._uploadFile, this._downloadFile, arg4), to_candid_VitalSigns_n83(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n35(this._uploadFile, this._downloadFile, arg8), to_candid_VisitType_n85(this._uploadFile, this._downloadFile, arg9));
+            const result = await this.actor.updateVisit(arg0, arg1, arg2, arg3, to_candid_opt_n42(this._uploadFile, this._downloadFile, arg4), to_candid_VitalSigns_n83(this._uploadFile, this._downloadFile, arg5), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg6), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg7), to_candid_opt_n42(this._uploadFile, this._downloadFile, arg8), to_candid_VisitType_n85(this._uploadFile, this._downloadFile, arg9));
             return from_candid_Visit_n86(this._uploadFile, this._downloadFile, result);
         }
     }
@@ -1579,32 +1596,32 @@ function from_candid_BedStatus_n27(_uploadFile: (file: ExternalBlob) => Promise<
 function from_candid_ClinicalAlert_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _ClinicalAlert): ClinicalAlert {
     return from_candid_record_n3(_uploadFile, _downloadFile, value);
 }
-function from_candid_ClinicalNote_n40(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _ClinicalNote): ClinicalNote {
-    return from_candid_record_n41(_uploadFile, _downloadFile, value);
+function from_candid_ClinicalNote_n47(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _ClinicalNote): ClinicalNote {
+    return from_candid_record_n48(_uploadFile, _downloadFile, value);
 }
-function from_candid_ClinicalOrder_n63(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _ClinicalOrder): ClinicalOrder {
-    return from_candid_record_n64(_uploadFile, _downloadFile, value);
+function from_candid_ClinicalOrder_n70(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _ClinicalOrder): ClinicalOrder {
+    return from_candid_record_n71(_uploadFile, _downloadFile, value);
 }
 function from_candid_CurrentUser_n106(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CurrentUser): CurrentUser {
     return from_candid_record_n107(_uploadFile, _downloadFile, value);
 }
-function from_candid_DiagnosisTemplate_n45(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _DiagnosisTemplate): DiagnosisTemplate {
-    return from_candid_record_n46(_uploadFile, _downloadFile, value);
+function from_candid_DiagnosisTemplate_n52(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _DiagnosisTemplate): DiagnosisTemplate {
+    return from_candid_record_n53(_uploadFile, _downloadFile, value);
 }
-function from_candid_EncounterStatus_n52(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _EncounterStatus): EncounterStatus {
-    return from_candid_variant_n53(_uploadFile, _downloadFile, value);
+function from_candid_EncounterStatus_n59(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _EncounterStatus): EncounterStatus {
+    return from_candid_variant_n60(_uploadFile, _downloadFile, value);
 }
-function from_candid_EncounterType_n54(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _EncounterType): EncounterType {
-    return from_candid_variant_n55(_uploadFile, _downloadFile, value);
+function from_candid_EncounterType_n61(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _EncounterType): EncounterType {
+    return from_candid_variant_n62(_uploadFile, _downloadFile, value);
 }
-function from_candid_Encounter_n50(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Encounter): Encounter {
-    return from_candid_record_n51(_uploadFile, _downloadFile, value);
+function from_candid_Encounter_n57(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Encounter): Encounter {
+    return from_candid_record_n58(_uploadFile, _downloadFile, value);
 }
-function from_candid_Gender_n77(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Gender): Gender {
-    return from_candid_variant_n78(_uploadFile, _downloadFile, value);
+function from_candid_Gender_n34(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Gender): Gender {
+    return from_candid_variant_n35(_uploadFile, _downloadFile, value);
 }
-function from_candid_NoteType_n42(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _NoteType): NoteType {
-    return from_candid_variant_n43(_uploadFile, _downloadFile, value);
+function from_candid_NoteType_n49(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _NoteType): NoteType {
+    return from_candid_variant_n50(_uploadFile, _downloadFile, value);
 }
 function from_candid_ObservationStatus_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _ObservationStatus): ObservationStatus {
     return from_candid_variant_n15(_uploadFile, _downloadFile, value);
@@ -1615,17 +1632,17 @@ function from_candid_ObservationType_n17(_uploadFile: (file: ExternalBlob) => Pr
 function from_candid_Observation_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Observation): Observation {
     return from_candid_record_n13(_uploadFile, _downloadFile, value);
 }
-function from_candid_OrderStatus_n65(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _OrderStatus): OrderStatus {
-    return from_candid_variant_n66(_uploadFile, _downloadFile, value);
+function from_candid_OrderStatus_n72(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _OrderStatus): OrderStatus {
+    return from_candid_variant_n73(_uploadFile, _downloadFile, value);
 }
-function from_candid_OrderType_n67(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _OrderType): OrderType {
-    return from_candid_variant_n68(_uploadFile, _downloadFile, value);
+function from_candid_OrderType_n74(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _OrderType): OrderType {
+    return from_candid_variant_n75(_uploadFile, _downloadFile, value);
 }
-function from_candid_PatientType_n79(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _PatientType): PatientType {
-    return from_candid_variant_n80(_uploadFile, _downloadFile, value);
+function from_candid_PatientType_n36(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _PatientType): PatientType {
+    return from_candid_variant_n37(_uploadFile, _downloadFile, value);
 }
-function from_candid_Patient_n74(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Patient): Patient {
-    return from_candid_record_n75(_uploadFile, _downloadFile, value);
+function from_candid_Patient_n31(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Patient): Patient {
+    return from_candid_record_n32(_uploadFile, _downloadFile, value);
 }
 function from_candid_Prescription_n81(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Prescription): Prescription {
     return from_candid_record_n82(_uploadFile, _downloadFile, value);
@@ -1643,7 +1660,7 @@ function from_candid_VersionedRecord_n21(_uploadFile: (file: ExternalBlob) => Pr
     return from_candid_record_n22(_uploadFile, _downloadFile, value);
 }
 function from_candid_VisitType_n90(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _VisitType): VisitType {
-    return from_candid_variant_n80(_uploadFile, _downloadFile, value);
+    return from_candid_variant_n37(_uploadFile, _downloadFile, value);
 }
 function from_candid_Visit_n86(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Visit): Visit {
     return from_candid_record_n87(_uploadFile, _downloadFile, value);
@@ -1655,10 +1672,10 @@ function from_candid_opt_n102(_uploadFile: (file: ExternalBlob) => Promise<Uint8
     return value.length === 0 ? null : value[0];
 }
 function from_candid_opt_n108(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_DiagnosisTemplate]): DiagnosisTemplate | null {
-    return value.length === 0 ? null : from_candid_DiagnosisTemplate_n45(_uploadFile, _downloadFile, value[0]);
+    return value.length === 0 ? null : from_candid_DiagnosisTemplate_n52(_uploadFile, _downloadFile, value[0]);
 }
 function from_candid_opt_n110(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Patient]): Patient | null {
-    return value.length === 0 ? null : from_candid_Patient_n74(_uploadFile, _downloadFile, value[0]);
+    return value.length === 0 ? null : from_candid_Patient_n31(_uploadFile, _downloadFile, value[0]);
 }
 function from_candid_opt_n111(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Prescription]): Prescription | null {
     return value.length === 0 ? null : from_candid_Prescription_n81(_uploadFile, _downloadFile, value[0]);
@@ -1672,13 +1689,13 @@ function from_candid_opt_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8A
 function from_candid_opt_n23(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
+function from_candid_opt_n33(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Time]): Time | null {
+    return value.length === 0 ? null : value[0];
+}
 function from_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_opt_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [Principal]): Principal | null {
-    return value.length === 0 ? null : value[0];
-}
-function from_candid_opt_n76(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Time]): Time | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_opt_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
@@ -1882,7 +1899,67 @@ function from_candid_record_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint
         resolvedAt: record_opt_to_undefined(from_candid_opt_n6(_uploadFile, _downloadFile, value.resolvedAt))
     };
 }
-function from_candid_record_n41(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_record_n32(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    id: bigint;
+    weight: [] | [number];
+    height: [] | [number];
+    consultantEmail: [] | [string];
+    nameBn: [] | [string];
+    consultantName: [] | [string];
+    dateOfBirth: [] | [_Time];
+    createdAt: _Time;
+    fullName: string;
+    email: [] | [string];
+    pastSurgicalHistory: [] | [string];
+    bloodGroup: [] | [string];
+    address: [] | [string];
+    gender: _Gender;
+    patientType: _PatientType;
+    chronicConditions: Array<string>;
+    phone: [] | [string];
+    allergies: Array<string>;
+}): {
+    id: bigint;
+    weight?: number;
+    height?: number;
+    consultantEmail?: string;
+    nameBn?: string;
+    consultantName?: string;
+    dateOfBirth?: Time;
+    createdAt: Time;
+    fullName: string;
+    email?: string;
+    pastSurgicalHistory?: string;
+    bloodGroup?: string;
+    address?: string;
+    gender: Gender;
+    patientType: PatientType;
+    chronicConditions: Array<string>;
+    phone?: string;
+    allergies: Array<string>;
+} {
+    return {
+        id: value.id,
+        weight: record_opt_to_undefined(from_candid_opt_n16(_uploadFile, _downloadFile, value.weight)),
+        height: record_opt_to_undefined(from_candid_opt_n16(_uploadFile, _downloadFile, value.height)),
+        consultantEmail: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.consultantEmail)),
+        nameBn: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.nameBn)),
+        consultantName: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.consultantName)),
+        dateOfBirth: record_opt_to_undefined(from_candid_opt_n33(_uploadFile, _downloadFile, value.dateOfBirth)),
+        createdAt: value.createdAt,
+        fullName: value.fullName,
+        email: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.email)),
+        pastSurgicalHistory: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.pastSurgicalHistory)),
+        bloodGroup: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.bloodGroup)),
+        address: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.address)),
+        gender: from_candid_Gender_n34(_uploadFile, _downloadFile, value.gender),
+        patientType: from_candid_PatientType_n36(_uploadFile, _downloadFile, value.patientType),
+        chronicConditions: value.chronicConditions,
+        phone: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.phone)),
+        allergies: value.allergies
+    };
+}
+function from_candid_record_n48(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     id: bigint;
     isDeleted: boolean;
     content: string;
@@ -1922,7 +1999,7 @@ function from_candid_record_n41(_uploadFile: (file: ExternalBlob) => Promise<Uin
         createdAt: value.createdAt,
         authorName: value.authorName,
         authorRole: from_candid_StaffRole_n19(_uploadFile, _downloadFile, value.authorRole),
-        noteType: from_candid_NoteType_n42(_uploadFile, _downloadFile, value.noteType),
+        noteType: from_candid_NoteType_n49(_uploadFile, _downloadFile, value.noteType),
         isDraft: value.isDraft,
         previousVersionIds: value.previousVersionIds,
         versionInfo: from_candid_VersionedRecord_n21(_uploadFile, _downloadFile, value.versionInfo),
@@ -1930,7 +2007,7 @@ function from_candid_record_n41(_uploadFile: (file: ExternalBlob) => Promise<Uin
         noteSubtype: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.noteSubtype))
     };
 }
-function from_candid_record_n46(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_record_n53(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     id: bigint;
     createdAt: bigint;
     createdBy: Principal;
@@ -1969,7 +2046,7 @@ function from_candid_record_n46(_uploadFile: (file: ExternalBlob) => Promise<Uin
         defaultAdviceBn: value.defaultAdviceBn
     };
 }
-function from_candid_record_n51(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_record_n58(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     id: bigint;
     status: _EncounterStatus;
     encounterType: _EncounterType;
@@ -1998,11 +2075,11 @@ function from_candid_record_n51(_uploadFile: (file: ExternalBlob) => Promise<Uin
 } {
     return {
         id: value.id,
-        status: from_candid_EncounterStatus_n52(_uploadFile, _downloadFile, value.status),
-        encounterType: from_candid_EncounterType_n54(_uploadFile, _downloadFile, value.encounterType),
+        status: from_candid_EncounterStatus_n59(_uploadFile, _downloadFile, value.status),
+        encounterType: from_candid_EncounterType_n61(_uploadFile, _downloadFile, value.encounterType),
         endDate: record_opt_to_undefined(from_candid_opt_n6(_uploadFile, _downloadFile, value.endDate)),
         patientId: value.patientId,
-        previousVersions: from_candid_vec_n56(_uploadFile, _downloadFile, value.previousVersions),
+        previousVersions: from_candid_vec_n63(_uploadFile, _downloadFile, value.previousVersions),
         providerName: value.providerName,
         providerId: value.providerId,
         versionInfo: from_candid_VersionedRecord_n21(_uploadFile, _downloadFile, value.versionInfo),
@@ -2011,7 +2088,7 @@ function from_candid_record_n51(_uploadFile: (file: ExternalBlob) => Promise<Uin
         startDate: value.startDate
     };
 }
-function from_candid_record_n64(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_record_n71(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     id: bigint;
     status: _OrderStatus;
     completedAt: [] | [bigint];
@@ -2046,13 +2123,13 @@ function from_candid_record_n64(_uploadFile: (file: ExternalBlob) => Promise<Uin
 } {
     return {
         id: value.id,
-        status: from_candid_OrderStatus_n65(_uploadFile, _downloadFile, value.status),
+        status: from_candid_OrderStatus_n72(_uploadFile, _downloadFile, value.status),
         completedAt: record_opt_to_undefined(from_candid_opt_n6(_uploadFile, _downloadFile, value.completedAt)),
         result: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.result)),
         patientId: value.patientId,
         code: value.code,
         description: value.description,
-        orderType: from_candid_OrderType_n67(_uploadFile, _downloadFile, value.orderType),
+        orderType: from_candid_OrderType_n74(_uploadFile, _downloadFile, value.orderType),
         orderedAt: value.orderedAt,
         orderedBy: value.orderedBy,
         notes: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.notes)),
@@ -2060,60 +2137,6 @@ function from_candid_record_n64(_uploadFile: (file: ExternalBlob) => Promise<Uin
         orderedByRole: from_candid_StaffRole_n19(_uploadFile, _downloadFile, value.orderedByRole),
         versionInfo: from_candid_VersionedRecord_n21(_uploadFile, _downloadFile, value.versionInfo),
         encounterId: record_opt_to_undefined(from_candid_opt_n23(_uploadFile, _downloadFile, value.encounterId))
-    };
-}
-function from_candid_record_n75(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
-    id: bigint;
-    weight: [] | [number];
-    height: [] | [number];
-    nameBn: [] | [string];
-    dateOfBirth: [] | [_Time];
-    createdAt: _Time;
-    fullName: string;
-    email: [] | [string];
-    pastSurgicalHistory: [] | [string];
-    bloodGroup: [] | [string];
-    address: [] | [string];
-    gender: _Gender;
-    patientType: _PatientType;
-    chronicConditions: Array<string>;
-    phone: [] | [string];
-    allergies: Array<string>;
-}): {
-    id: bigint;
-    weight?: number;
-    height?: number;
-    nameBn?: string;
-    dateOfBirth?: Time;
-    createdAt: Time;
-    fullName: string;
-    email?: string;
-    pastSurgicalHistory?: string;
-    bloodGroup?: string;
-    address?: string;
-    gender: Gender;
-    patientType: PatientType;
-    chronicConditions: Array<string>;
-    phone?: string;
-    allergies: Array<string>;
-} {
-    return {
-        id: value.id,
-        weight: record_opt_to_undefined(from_candid_opt_n16(_uploadFile, _downloadFile, value.weight)),
-        height: record_opt_to_undefined(from_candid_opt_n16(_uploadFile, _downloadFile, value.height)),
-        nameBn: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.nameBn)),
-        dateOfBirth: record_opt_to_undefined(from_candid_opt_n76(_uploadFile, _downloadFile, value.dateOfBirth)),
-        createdAt: value.createdAt,
-        fullName: value.fullName,
-        email: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.email)),
-        pastSurgicalHistory: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.pastSurgicalHistory)),
-        bloodGroup: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.bloodGroup)),
-        address: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.address)),
-        gender: from_candid_Gender_n77(_uploadFile, _downloadFile, value.gender),
-        patientType: from_candid_PatientType_n79(_uploadFile, _downloadFile, value.patientType),
-        chronicConditions: value.chronicConditions,
-        phone: record_opt_to_undefined(from_candid_opt_n8(_uploadFile, _downloadFile, value.phone)),
-        allergies: value.allergies
     };
 }
 function from_candid_record_n82(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
@@ -2411,7 +2434,23 @@ function from_candid_variant_n28(_uploadFile: (file: ExternalBlob) => Promise<Ui
 }): BedStatus {
     return "Empty" in value ? BedStatus.Empty : "Maintenance" in value ? BedStatus.Maintenance : "Occupied" in value ? BedStatus.Occupied : value;
 }
-function from_candid_variant_n39(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n35(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    other: null;
+} | {
+    female: null;
+} | {
+    male: null;
+}): Gender {
+    return "other" in value ? Gender.other : "female" in value ? Gender.female : "male" in value ? Gender.male : value;
+}
+function from_candid_variant_n37(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    admitted: null;
+} | {
+    outdoor: null;
+}): PatientType {
+    return "admitted" in value ? PatientType.admitted : "outdoor" in value ? PatientType.outdoor : value;
+}
+function from_candid_variant_n46(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     ok: _ClinicalNote;
 } | {
     err: string;
@@ -2424,60 +2463,7 @@ function from_candid_variant_n39(_uploadFile: (file: ExternalBlob) => Promise<Ui
 } {
     return "ok" in value ? {
         __kind__: "ok",
-        ok: from_candid_ClinicalNote_n40(_uploadFile, _downloadFile, value.ok)
-    } : "err" in value ? {
-        __kind__: "err",
-        err: value.err
-    } : value;
-}
-function from_candid_variant_n43(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
-    SOAP: null;
-} | {
-    Nursing: null;
-} | {
-    DailyProgress: null;
-} | {
-    General: null;
-} | {
-    Handover: null;
-} | {
-    Discharge: null;
-}): NoteType {
-    return "SOAP" in value ? NoteType.SOAP : "Nursing" in value ? NoteType.Nursing : "DailyProgress" in value ? NoteType.DailyProgress : "General" in value ? NoteType.General : "Handover" in value ? NoteType.Handover : "Discharge" in value ? NoteType.Discharge : value;
-}
-function from_candid_variant_n44(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
-    ok: _DiagnosisTemplate;
-} | {
-    err: string;
-}): {
-    __kind__: "ok";
-    ok: DiagnosisTemplate;
-} | {
-    __kind__: "err";
-    err: string;
-} {
-    return "ok" in value ? {
-        __kind__: "ok",
-        ok: from_candid_DiagnosisTemplate_n45(_uploadFile, _downloadFile, value.ok)
-    } : "err" in value ? {
-        __kind__: "err",
-        err: value.err
-    } : value;
-}
-function from_candid_variant_n49(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
-    ok: _Encounter;
-} | {
-    err: string;
-}): {
-    __kind__: "ok";
-    ok: Encounter;
-} | {
-    __kind__: "err";
-    err: string;
-} {
-    return "ok" in value ? {
-        __kind__: "ok",
-        ok: from_candid_Encounter_n50(_uploadFile, _downloadFile, value.ok)
+        ok: from_candid_ClinicalNote_n47(_uploadFile, _downloadFile, value.ok)
     } : "err" in value ? {
         __kind__: "err",
         err: value.err
@@ -2500,7 +2486,60 @@ function from_candid_variant_n5(_uploadFile: (file: ExternalBlob) => Promise<Uin
 }): AlertType {
     return "AKI" in value ? AlertType.AKI : "Hypotension" in value ? AlertType.Hypotension : "CriticalLab" in value ? AlertType.CriticalLab : "Sepsis" in value ? AlertType.Sepsis : "DrugInteraction" in value ? AlertType.DrugInteraction : "Hypoxia" in value ? AlertType.Hypoxia : "AllergyContraindication" in value ? AlertType.AllergyContraindication : value;
 }
-function from_candid_variant_n53(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n50(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    SOAP: null;
+} | {
+    Nursing: null;
+} | {
+    DailyProgress: null;
+} | {
+    General: null;
+} | {
+    Handover: null;
+} | {
+    Discharge: null;
+}): NoteType {
+    return "SOAP" in value ? NoteType.SOAP : "Nursing" in value ? NoteType.Nursing : "DailyProgress" in value ? NoteType.DailyProgress : "General" in value ? NoteType.General : "Handover" in value ? NoteType.Handover : "Discharge" in value ? NoteType.Discharge : value;
+}
+function from_candid_variant_n51(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    ok: _DiagnosisTemplate;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: DiagnosisTemplate;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: from_candid_DiagnosisTemplate_n52(_uploadFile, _downloadFile, value.ok)
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
+}
+function from_candid_variant_n56(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    ok: _Encounter;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: Encounter;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: from_candid_Encounter_n57(_uploadFile, _downloadFile, value.ok)
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
+}
+function from_candid_variant_n60(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     Planned: null;
 } | {
     Cancelled: null;
@@ -2511,7 +2550,7 @@ function from_candid_variant_n53(_uploadFile: (file: ExternalBlob) => Promise<Ui
 }): EncounterStatus {
     return "Planned" in value ? EncounterStatus.Planned : "Cancelled" in value ? EncounterStatus.Cancelled : "InProgress" in value ? EncounterStatus.InProgress : "Completed" in value ? EncounterStatus.Completed : value;
 }
-function from_candid_variant_n55(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n62(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     IPD: null;
 } | {
     OPD: null;
@@ -2522,7 +2561,7 @@ function from_candid_variant_n55(_uploadFile: (file: ExternalBlob) => Promise<Ui
 }): EncounterType {
     return "IPD" in value ? EncounterType.IPD : "OPD" in value ? EncounterType.OPD : "FollowUp" in value ? EncounterType.FollowUp : "Emergency" in value ? EncounterType.Emergency : value;
 }
-function from_candid_variant_n62(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n69(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     ok: _ClinicalOrder;
 } | {
     err: string;
@@ -2535,13 +2574,13 @@ function from_candid_variant_n62(_uploadFile: (file: ExternalBlob) => Promise<Ui
 } {
     return "ok" in value ? {
         __kind__: "ok",
-        ok: from_candid_ClinicalOrder_n63(_uploadFile, _downloadFile, value.ok)
+        ok: from_candid_ClinicalOrder_n70(_uploadFile, _downloadFile, value.ok)
     } : "err" in value ? {
         __kind__: "err",
         err: value.err
     } : value;
 }
-function from_candid_variant_n66(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n73(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     Requested: null;
 } | {
     Cancelled: null;
@@ -2554,7 +2593,7 @@ function from_candid_variant_n66(_uploadFile: (file: ExternalBlob) => Promise<Ui
 }): OrderStatus {
     return "Requested" in value ? OrderStatus.Requested : "Cancelled" in value ? OrderStatus.Cancelled : "InProgress" in value ? OrderStatus.InProgress : "Completed" in value ? OrderStatus.Completed : "Pending" in value ? OrderStatus.Pending : value;
 }
-function from_candid_variant_n68(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n75(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     Medication: null;
 } | {
     Procedure: null;
@@ -2565,22 +2604,6 @@ function from_candid_variant_n68(_uploadFile: (file: ExternalBlob) => Promise<Ui
 }): OrderType {
     return "Medication" in value ? OrderType.Medication : "Procedure" in value ? OrderType.Procedure : "Investigation" in value ? OrderType.Investigation : "LabTest" in value ? OrderType.LabTest : value;
 }
-function from_candid_variant_n78(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
-    other: null;
-} | {
-    female: null;
-} | {
-    male: null;
-}): Gender {
-    return "other" in value ? Gender.other : "female" in value ? Gender.female : "male" in value ? Gender.male : value;
-}
-function from_candid_variant_n80(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
-    admitted: null;
-} | {
-    outdoor: null;
-}): PatientType {
-    return "admitted" in value ? PatientType.admitted : "outdoor" in value ? PatientType.outdoor : value;
-}
 function from_candid_vec_n100(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_Prescription>): Array<Prescription> {
     return value.map((x)=>from_candid_Prescription_n81(_uploadFile, _downloadFile, x));
 }
@@ -2588,16 +2611,16 @@ function from_candid_vec_n101(_uploadFile: (file: ExternalBlob) => Promise<Uint8
     return value.map((x)=>from_candid_Visit_n86(_uploadFile, _downloadFile, x));
 }
 function from_candid_vec_n105(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_ClinicalNote>): Array<ClinicalNote> {
-    return value.map((x)=>from_candid_ClinicalNote_n40(_uploadFile, _downloadFile, x));
+    return value.map((x)=>from_candid_ClinicalNote_n47(_uploadFile, _downloadFile, x));
 }
 function from_candid_vec_n109(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_Observation>): Array<Observation> {
     return value.map((x)=>from_candid_Observation_n12(_uploadFile, _downloadFile, x));
 }
-function from_candid_vec_n56(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_VersionedRecord>): Array<VersionedRecord> {
+function from_candid_vec_n63(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_VersionedRecord>): Array<VersionedRecord> {
     return value.map((x)=>from_candid_VersionedRecord_n21(_uploadFile, _downloadFile, x));
 }
 function from_candid_vec_n91(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_ClinicalOrder>): Array<ClinicalOrder> {
-    return value.map((x)=>from_candid_ClinicalOrder_n63(_uploadFile, _downloadFile, x));
+    return value.map((x)=>from_candid_ClinicalOrder_n70(_uploadFile, _downloadFile, x));
 }
 function from_candid_vec_n92(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_ClinicalAlert>): Array<ClinicalAlert> {
     return value.map((x)=>from_candid_ClinicalAlert_n2(_uploadFile, _downloadFile, x));
@@ -2609,49 +2632,49 @@ function from_candid_vec_n96(_uploadFile: (file: ExternalBlob) => Promise<Uint8A
     return value.map((x)=>from_candid_BedRecord_n25(_uploadFile, _downloadFile, x));
 }
 function from_candid_vec_n97(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_DiagnosisTemplate>): Array<DiagnosisTemplate> {
-    return value.map((x)=>from_candid_DiagnosisTemplate_n45(_uploadFile, _downloadFile, x));
+    return value.map((x)=>from_candid_DiagnosisTemplate_n52(_uploadFile, _downloadFile, x));
 }
 function from_candid_vec_n98(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_Encounter>): Array<Encounter> {
-    return value.map((x)=>from_candid_Encounter_n50(_uploadFile, _downloadFile, x));
+    return value.map((x)=>from_candid_Encounter_n57(_uploadFile, _downloadFile, x));
 }
 function from_candid_vec_n99(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_Patient>): Array<Patient> {
-    return value.map((x)=>from_candid_Patient_n74(_uploadFile, _downloadFile, x));
+    return value.map((x)=>from_candid_Patient_n31(_uploadFile, _downloadFile, x));
 }
-function to_candid_AlertSeverity_n33(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AlertSeverity): _AlertSeverity {
-    return to_candid_variant_n34(_uploadFile, _downloadFile, value);
+function to_candid_AlertSeverity_n40(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AlertSeverity): _AlertSeverity {
+    return to_candid_variant_n41(_uploadFile, _downloadFile, value);
 }
-function to_candid_AlertType_n31(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AlertType): _AlertType {
-    return to_candid_variant_n32(_uploadFile, _downloadFile, value);
+function to_candid_AlertType_n38(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AlertType): _AlertType {
+    return to_candid_variant_n39(_uploadFile, _downloadFile, value);
 }
 function to_candid_EncounterStatus_n117(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: EncounterStatus): _EncounterStatus {
     return to_candid_variant_n118(_uploadFile, _downloadFile, value);
 }
-function to_candid_EncounterType_n47(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: EncounterType): _EncounterType {
-    return to_candid_variant_n48(_uploadFile, _downloadFile, value);
+function to_candid_EncounterType_n54(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: EncounterType): _EncounterType {
+    return to_candid_variant_n55(_uploadFile, _downloadFile, value);
 }
-function to_candid_Gender_n70(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Gender): _Gender {
-    return to_candid_variant_n71(_uploadFile, _downloadFile, value);
+function to_candid_Gender_n77(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Gender): _Gender {
+    return to_candid_variant_n78(_uploadFile, _downloadFile, value);
 }
-function to_candid_NoteType_n37(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: NoteType): _NoteType {
-    return to_candid_variant_n38(_uploadFile, _downloadFile, value);
+function to_candid_NoteType_n44(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: NoteType): _NoteType {
+    return to_candid_variant_n45(_uploadFile, _downloadFile, value);
 }
-function to_candid_ObservationType_n57(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: ObservationType): _ObservationType {
-    return to_candid_variant_n58(_uploadFile, _downloadFile, value);
+function to_candid_ObservationType_n64(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: ObservationType): _ObservationType {
+    return to_candid_variant_n65(_uploadFile, _downloadFile, value);
 }
 function to_candid_OrderStatus_n120(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: OrderStatus): _OrderStatus {
     return to_candid_variant_n121(_uploadFile, _downloadFile, value);
 }
-function to_candid_OrderType_n60(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: OrderType): _OrderType {
-    return to_candid_variant_n61(_uploadFile, _downloadFile, value);
+function to_candid_OrderType_n67(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: OrderType): _OrderType {
+    return to_candid_variant_n68(_uploadFile, _downloadFile, value);
 }
-function to_candid_PatientType_n72(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: PatientType): _PatientType {
-    return to_candid_variant_n73(_uploadFile, _downloadFile, value);
+function to_candid_PatientType_n79(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: PatientType): _PatientType {
+    return to_candid_variant_n80(_uploadFile, _downloadFile, value);
 }
 function to_candid_UserRole_n29(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): _UserRole {
     return to_candid_variant_n30(_uploadFile, _downloadFile, value);
 }
 function to_candid_VisitType_n85(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: VisitType): _VisitType {
-    return to_candid_variant_n73(_uploadFile, _downloadFile, value);
+    return to_candid_variant_n80(_uploadFile, _downloadFile, value);
 }
 function to_candid_VitalSigns_n83(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: VitalSigns): _VitalSigns {
     return to_candid_record_n84(_uploadFile, _downloadFile, value);
@@ -2659,16 +2682,16 @@ function to_candid_VitalSigns_n83(_uploadFile: (file: ExternalBlob) => Promise<U
 function to_candid_opt_n119(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n35(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: string | null): [] | [string] {
+function to_candid_opt_n42(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n36(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: bigint | null): [] | [bigint] {
+function to_candid_opt_n43(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n59(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: number | null): [] | [number] {
+function to_candid_opt_n66(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: number | null): [] | [number] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n69(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Time | null): [] | [_Time] {
+function to_candid_opt_n76(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Time | null): [] | [_Time] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_record_n84(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
@@ -2749,7 +2772,7 @@ function to_candid_variant_n30(_uploadFile: (file: ExternalBlob) => Promise<Uint
         guest: null
     } : value;
 }
-function to_candid_variant_n32(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AlertType): {
+function to_candid_variant_n39(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AlertType): {
     AKI: null;
 } | {
     Hypotension: null;
@@ -2780,7 +2803,7 @@ function to_candid_variant_n32(_uploadFile: (file: ExternalBlob) => Promise<Uint
         AllergyContraindication: null
     } : value;
 }
-function to_candid_variant_n34(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AlertSeverity): {
+function to_candid_variant_n41(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AlertSeverity): {
     Info: null;
 } | {
     Critical: null;
@@ -2795,7 +2818,7 @@ function to_candid_variant_n34(_uploadFile: (file: ExternalBlob) => Promise<Uint
         Warning: null
     } : value;
 }
-function to_candid_variant_n38(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: NoteType): {
+function to_candid_variant_n45(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: NoteType): {
     SOAP: null;
 } | {
     Nursing: null;
@@ -2822,7 +2845,7 @@ function to_candid_variant_n38(_uploadFile: (file: ExternalBlob) => Promise<Uint
         Discharge: null
     } : value;
 }
-function to_candid_variant_n48(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: EncounterType): {
+function to_candid_variant_n55(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: EncounterType): {
     IPD: null;
 } | {
     OPD: null;
@@ -2841,7 +2864,7 @@ function to_candid_variant_n48(_uploadFile: (file: ExternalBlob) => Promise<Uint
         Emergency: null
     } : value;
 }
-function to_candid_variant_n58(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: ObservationType): {
+function to_candid_variant_n65(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: ObservationType): {
     Lab: null;
 } | {
     ExamFinding: null;
@@ -2864,7 +2887,7 @@ function to_candid_variant_n58(_uploadFile: (file: ExternalBlob) => Promise<Uint
         Vital: null
     } : value;
 }
-function to_candid_variant_n61(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: OrderType): {
+function to_candid_variant_n68(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: OrderType): {
     Medication: null;
 } | {
     Procedure: null;
@@ -2883,7 +2906,7 @@ function to_candid_variant_n61(_uploadFile: (file: ExternalBlob) => Promise<Uint
         LabTest: null
     } : value;
 }
-function to_candid_variant_n71(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Gender): {
+function to_candid_variant_n78(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Gender): {
     other: null;
 } | {
     female: null;
@@ -2898,7 +2921,7 @@ function to_candid_variant_n71(_uploadFile: (file: ExternalBlob) => Promise<Uint
         male: null
     } : value;
 }
-function to_candid_variant_n73(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: PatientType): {
+function to_candid_variant_n80(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: PatientType): {
     admitted: null;
 } | {
     outdoor: null;

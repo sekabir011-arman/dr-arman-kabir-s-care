@@ -57,7 +57,9 @@ export interface Patient {
     id: bigint;
     weight?: number;
     height?: number;
+    consultantEmail?: string;
     nameBn?: string;
+    consultantName?: string;
     dateOfBirth?: Time;
     createdAt: Time;
     fullName: string;
@@ -323,6 +325,7 @@ export interface backendInterface {
         err: string;
     }>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    assignConsultant(patientId: bigint, consultantEmail: string, consultantName: string): Promise<Patient>;
     createBedRecord(bedNumber: string, ward: string): Promise<{
         __kind__: "ok";
         ok: BedRecord;
@@ -372,7 +375,7 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
-    createPatient(fullName: string, nameBn: string | null, dateOfBirth: Time | null, gender: Gender, phone: string | null, email: string | null, address: string | null, bloodGroup: string | null, weight: number | null, height: number | null, allergies: Array<string>, chronicConditions: Array<string>, pastSurgicalHistory: string | null, patientType: PatientType): Promise<Patient>;
+    createPatient(fullName: string, nameBn: string | null, dateOfBirth: Time | null, gender: Gender, phone: string | null, email: string | null, address: string | null, bloodGroup: string | null, weight: number | null, height: number | null, allergies: Array<string>, chronicConditions: Array<string>, pastSurgicalHistory: string | null, patientType: PatientType, consultantEmail: string | null, consultantName: string | null): Promise<Patient>;
     createPrescription(patientId: bigint, visitId: bigint | null, prescriptionDate: Time, diagnosis: string | null, medications: Array<Medication>, notes: string | null): Promise<Prescription>;
     createVisit(patientId: bigint, visitDate: Time, chiefComplaint: string, historyOfPresentIllness: string | null, vitalSigns: VitalSigns, physicalExamination: string | null, diagnosis: string | null, notes: string | null, visitType: VisitType): Promise<Visit>;
     deletePatient(id: bigint): Promise<void>;
@@ -474,7 +477,7 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
-    updatePatient(id: bigint, fullName: string, nameBn: string | null, dateOfBirth: Time | null, gender: Gender, phone: string | null, email: string | null, address: string | null, bloodGroup: string | null, weight: number | null, height: number | null, allergies: Array<string>, chronicConditions: Array<string>, pastSurgicalHistory: string | null, patientType: PatientType): Promise<Patient>;
+    updatePatient(id: bigint, fullName: string, nameBn: string | null, dateOfBirth: Time | null, gender: Gender, phone: string | null, email: string | null, address: string | null, bloodGroup: string | null, weight: number | null, height: number | null, allergies: Array<string>, chronicConditions: Array<string>, pastSurgicalHistory: string | null, patientType: PatientType, consultantEmail: string | null, consultantName: string | null): Promise<Patient>;
     updatePrescription(id: bigint, patientId: bigint, visitId: bigint | null, prescriptionDate: Time, diagnosis: string | null, medications: Array<Medication>, notes: string | null): Promise<Prescription>;
     updateVisit(id: bigint, patientId: bigint, visitDate: Time, chiefComplaint: string, historyOfPresentIllness: string | null, vitalSigns: VitalSigns, physicalExamination: string | null, diagnosis: string | null, notes: string | null, visitType: VisitType): Promise<Visit>;
 }

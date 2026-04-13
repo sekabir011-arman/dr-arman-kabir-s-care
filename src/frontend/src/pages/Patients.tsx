@@ -17,6 +17,7 @@ import {
   Mail,
   Phone,
   Search,
+  UserCheck,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -26,7 +27,11 @@ import { toast } from "sonner";
 import NurseDueMeds from "../components/NurseDueMeds";
 import PatientForm from "../components/PatientForm";
 import { useEmailAuth } from "../hooks/useEmailAuth";
-import { useCreatePatient, useGetAllPatients } from "../hooks/useQueries";
+import {
+  getDoctorEmail,
+  useCreatePatient,
+  useGetAllPatients,
+} from "../hooks/useQueries";
 import { useRolePermissions } from "../hooks/useRolePermissions";
 import type { Patient } from "../types";
 
@@ -45,10 +50,12 @@ function PatientCard({
   patient,
   index,
   restricted,
+  assignedToCurrentUser,
 }: {
   patient: Patient;
   index: number;
   restricted?: boolean;
+  assignedToCurrentUser?: boolean;
 }) {
   const navigate = useNavigate();
   const initial = patient.fullName.charAt(0).toUpperCase();
@@ -119,7 +126,13 @@ function PatientCard({
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
+              <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                {assignedToCurrentUser && (
+                  <Badge className="text-xs bg-purple-100 text-purple-800 border border-purple-300 gap-1">
+                    <UserCheck className="w-2.5 h-2.5" />
+                    Assigned to you
+                  </Badge>
+                )}
                 {patient.bloodGroup && patient.bloodGroup !== "unknown" && (
                   <Badge
                     variant="outline"
@@ -178,6 +191,12 @@ export default function Patients() {
   const createMutation = useCreatePatient();
   const permissions = useRolePermissions();
   const { currentDoctor } = useEmailAuth();
+
+  // Current user's email for consultant assignment check
+  const currentUserEmail = currentDoctor?.email ?? getDoctorEmail();
+  const isConsultant =
+    currentDoctor?.role === "consultant_doctor" ||
+    currentDoctor?.role === "doctor";
 
   // MO / Intern / Nurse can only access admitted/inpatient patients
   const inpatientOnly = !permissions.canAccessOutpatient;
@@ -324,6 +343,11 @@ export default function Patients() {
                 patient={patient}
                 index={idx}
                 restricted={inpatientOnly && !isAdmitted(patient)}
+                assignedToCurrentUser={
+                  isConsultant &&
+                  !!patient.consultantAssignment &&
+                  patient.consultantAssignment.email === currentUserEmail
+                }
               />
             ))}
           </AnimatePresence>

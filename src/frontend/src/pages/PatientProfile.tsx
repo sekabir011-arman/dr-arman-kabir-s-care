@@ -70,6 +70,7 @@ import UpgradedPrescriptionEMR from "../components/UpgradedPrescriptionEMR";
 import VisitForm from "../components/VisitForm";
 import { useAdminAuth } from "../hooks/useAdminAuth";
 import { useEmailAuth } from "../hooks/useEmailAuth";
+import { loadRegistry } from "../hooks/useEmailAuth";
 import {
   getDoctorEmail,
   getVisitFormData,
@@ -85,6 +86,7 @@ import {
   useGetPatient,
   useGetPrescriptionsByPatient,
   useGetVisitsByPatient,
+  useReassignConsultant,
   useUpdatePatient,
 } from "../hooks/useQueries";
 import { useRolePermissions } from "../hooks/useRolePermissions";
@@ -95,6 +97,120 @@ import {
 import type { Prescription, StaffRole, Visit } from "../types";
 
 const RX_SKELETON_KEYS = ["rsk1", "rsk2", "rsk3"];
+
+// ── Reassign Consultant Modal ─────────────────────────────────────────────────
+
+function ReassignConsultantModal({
+  open,
+  onClose,
+  patientId,
+  currentConsultantEmail,
+  currentUserEmail,
+  currentUserName,
+  currentUserRole,
+}: {
+  open: boolean;
+  onClose: () => void;
+  patientId: bigint;
+  currentConsultantEmail?: string;
+  currentUserEmail: string;
+  currentUserName: string;
+  currentUserRole: import("../types").StaffRole;
+}) {
+  const [selectedEmail, setSelectedEmail] = useState(
+    currentConsultantEmail ?? "",
+  );
+  const reassignMutation = useReassignConsultant();
+  const consultants = loadRegistry().filter(
+    (d) =>
+      d.status === "approved" &&
+      (d.role === "consultant_doctor" || d.role === "doctor"),
+  );
+
+  const handleSave = () => {
+    const consultant = consultants.find((c) => c.email === selectedEmail);
+    if (!consultant) {
+      toast.error("Please select a consultant");
+      return;
+    }
+    reassignMutation.mutate(
+      {
+        patientId,
+        newConsultant: { email: consultant.email, name: consultant.name },
+        assignedBy: currentUserEmail,
+        assignedByName: currentUserName,
+        assignedByRole: currentUserRole,
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Consultant assigned to ${consultant.name}`);
+          onClose();
+        },
+        onError: () => toast.error("Failed to reassign consultant"),
+      },
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent
+        className="max-w-sm"
+        data-ocid="patient_profile.reassign_consultant.dialog"
+      >
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-purple-600" />
+            Assign / Reassign Consultant
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          {consultants.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No approved Consultant Doctors found in the system.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Select Consultant</Label>
+              <select
+                value={selectedEmail}
+                onChange={(e) => setSelectedEmail(e.target.value)}
+                className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                data-ocid="patient_profile.reassign_consultant.select"
+              >
+                <option value="">— Select Consultant —</option>
+                {consultants.map((c) => (
+                  <option key={c.email} value={c.email}>
+                    {c.name}
+                    {c.designation ? ` — ${c.designation}` : ""}
+                    {c.email === currentConsultantEmail ? " (current)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={onClose} size="sm">
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={
+                reassignMutation.isPending ||
+                !selectedEmail ||
+                consultants.length === 0
+              }
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+              data-ocid="patient_profile.reassign_consultant.save_button"
+            >
+              {reassignMutation.isPending ? "Saving…" : "Save Assignment"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function getAge(dateOfBirth?: bigint): number | null {
   if (!dateOfBirth) return null;
@@ -598,12 +714,19 @@ export default function PatientProfile() {
   const [padPrescription, setPadPrescription] = useState<Prescription | null>(
     null,
   );
+  const [showReassignConsultant, setShowReassignConsultant] = useState(false);
 
   const role = (currentDoctor?.role ?? "staff") as StaffRole;
   const canViewAudit =
     isAdmin || role === "consultant_doctor" || permissions.canViewAuditTrail;
   const isDraftRole =
     role === "intern_doctor" && !permissions.canFinalizeClinicalNote;
+  // Roles that can assign/reassign a consultant
+  const canReassignConsultant =
+    isAdmin ||
+    role === "consultant_doctor" ||
+    role === "doctor" ||
+    role === "medical_officer";
 
   const { data: patient, isLoading: loadingPatient } = useGetPatient(patientId);
   const { data: visits = [], isLoading: _loadingVisits } =
@@ -1108,6 +1231,37 @@ export default function PatientProfile() {
                           {patient.chronicConditions.join(", ")}
                         </span>
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Consultant Assignment Row — shown for admitted patients */}
+                {(patient.isAdmitted ||
+                  patient.patientType === "admitted" ||
+                  patient.patientType === "indoor") && (
+                  <div className="flex items-center gap-2 mt-3">
+                    <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-lg px-2.5 py-1.5 flex-1 min-w-0">
+                      <Users className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
+                      <span className="text-xs text-purple-800 font-medium truncate">
+                        Consultant:{" "}
+                        {patient.consultantAssignment?.name ?? (
+                          <span className="italic font-normal text-purple-400">
+                            Not assigned
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    {canReassignConsultant && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowReassignConsultant(true)}
+                        className="flex-shrink-0 gap-1 text-xs border-purple-300 text-purple-700 hover:bg-purple-50 h-7 px-2"
+                        data-ocid="patient_profile.reassign_consultant.button"
+                      >
+                        <Edit className="w-3 h-3" />
+                        {patient.consultantAssignment ? "Reassign" : "Assign"}
+                      </Button>
                     )}
                   </div>
                 )}
@@ -2505,6 +2659,19 @@ export default function PatientProfile() {
         >
           <Bot className="w-5 h-5" />
         </button>
+      )}
+
+      {/* Reassign Consultant Modal */}
+      {showReassignConsultant && patientId && (
+        <ReassignConsultantModal
+          open={showReassignConsultant}
+          onClose={() => setShowReassignConsultant(false)}
+          patientId={patientId}
+          currentConsultantEmail={patient.consultantAssignment?.email}
+          currentUserEmail={currentDoctor?.email ?? getDoctorEmail()}
+          currentUserName={currentDoctor?.name ?? ""}
+          currentUserRole={role}
+        />
       )}
     </div>
   );

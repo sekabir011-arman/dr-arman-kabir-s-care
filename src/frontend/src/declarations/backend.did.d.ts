@@ -194,7 +194,9 @@ export interface Patient {
   'id' : bigint,
   'weight' : [] | [number],
   'height' : [] | [number],
+  'consultantEmail' : [] | [string],
   'nameBn' : [] | [string],
+  'consultantName' : [] | [string],
   'dateOfBirth' : [] | [Time],
   'createdAt' : Time,
   'fullName' : string,
@@ -290,6 +292,7 @@ export interface _SERVICE {
       { 'err' : string }
   >,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'assignConsultant' : ActorMethod<[bigint, string, string], Patient>,
   'createBedRecord' : ActorMethod<
     [string, string],
     { 'ok' : BedRecord } |
@@ -360,6 +363,8 @@ export interface _SERVICE {
       Array<string>,
       [] | [string],
       PatientType,
+      [] | [string],
+      [] | [string],
     ],
     Patient
   >,
@@ -501,6 +506,8 @@ export interface _SERVICE {
       Array<string>,
       [] | [string],
       PatientType,
+      [] | [string],
+      [] | [string],
     ],
     Patient
   >,

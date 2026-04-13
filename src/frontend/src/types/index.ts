@@ -70,6 +70,13 @@ export interface Medication {
   [key: string]: string | undefined;
 }
 
+export interface ConsultantAssignment {
+  email: string;
+  name: string;
+  assignedAt: string; // ISO date
+  assignedBy: string; // email of who assigned
+}
+
 export interface Patient {
   id: bigint;
   fullName: string;
@@ -102,6 +109,7 @@ export interface Patient {
   signUpEnabled?: boolean;
   edd?: string; // Expected delivery date
   lmpDate?: string; // Last menstrual period
+  consultantAssignment?: ConsultantAssignment;
   [key: string]: unknown;
 }
 
@@ -487,6 +495,7 @@ export interface AdmissionHistory {
   dischargedOn: string | null;
   status: "active" | "discharged";
   createdAt: string;
+  consultantAssignment?: ConsultantAssignment;
 }
 
 export interface BedTransferEntry {

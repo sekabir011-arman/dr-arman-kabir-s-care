@@ -13,9 +13,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
-import { BedDouble, Building2, Stethoscope } from "lucide-react";
+import { BedDouble, Building2, Stethoscope, UserCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { loadRegistry } from "../hooks/useEmailAuth";
 import {
   getDoctorEmail,
   getVisitFormData,
@@ -69,6 +70,7 @@ export default function AdmitPatientDialog({
     format(new Date(), "yyyy-MM-dd"),
   );
   const [reason, setReason] = useState("");
+  const [selectedConsultantEmail, setSelectedConsultantEmail] = useState("");
 
   // Carry-over checklist
   const [carryComplaints, setCarryComplaints] = useState(true);
@@ -78,6 +80,13 @@ export default function AdmitPatientDialog({
   const [carryDiagnosis, setCarryDiagnosis] = useState(true);
 
   const admitMutation = useAdmitPatient();
+
+  // Load approved consultants from the doctor registry
+  const consultants = loadRegistry().filter(
+    (d) =>
+      d.status === "approved" &&
+      (d.role === "consultant_doctor" || d.role === "doctor"),
+  );
 
   // Extract data from latest visit form
   const visitData = latestVisit ? getVisitFormData(latestVisit.id) : null;
@@ -136,6 +145,9 @@ export default function AdmitPatientDialog({
     }
 
     const isIntern = viewerRole === "intern_doctor";
+    const selectedConsultant = selectedConsultantEmail
+      ? consultants.find((c) => c.email === selectedConsultantEmail)
+      : null;
 
     admitMutation.mutate(
       {
@@ -154,6 +166,16 @@ export default function AdmitPatientDialog({
           ? extractedPrescriptionIds
           : [],
         isIntern,
+        ...(selectedConsultant
+          ? {
+              consultantAssignment: {
+                email: selectedConsultant.email,
+                name: selectedConsultant.name,
+                assignedAt: new Date().toISOString(),
+                assignedBy: getDoctorEmail(),
+              },
+            }
+          : {}),
       },
       {
         onSuccess: () => {
@@ -265,6 +287,36 @@ export default function AdmitPatientDialog({
                 />
               </div>
             </div>
+          </div>
+
+          {/* Assigned Consultant */}
+          <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-2">
+            <h4 className="font-semibold text-purple-800 text-sm flex items-center gap-2">
+              <UserCheck className="w-4 h-4" /> Assigned Consultant
+              <span className="text-xs font-normal text-purple-500 ml-1">
+                (optional)
+              </span>
+            </h4>
+            {consultants.length === 0 ? (
+              <p className="text-xs text-purple-500 italic">
+                No approved Consultant Doctors found in the system.
+              </p>
+            ) : (
+              <select
+                value={selectedConsultantEmail}
+                onChange={(e) => setSelectedConsultantEmail(e.target.value)}
+                className="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                data-ocid="admit_patient.consultant_select"
+              >
+                <option value="">— Select Consultant (optional) —</option>
+                {consultants.map((c) => (
+                  <option key={c.email} value={c.email}>
+                    {c.name}
+                    {c.designation ? ` — ${c.designation}` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Carry-over checklist */}

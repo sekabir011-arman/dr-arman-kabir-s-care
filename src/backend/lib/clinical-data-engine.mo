@@ -772,7 +772,7 @@ module {
 
   public func createBedRecord(
     state : EngineState,
-    caller : Principal,
+    _caller : Principal,
     callerRole : Types.StaffRole,
     bedNumber : Text,
     ward : Text,
@@ -799,7 +799,7 @@ module {
 
   public func assignBed(
     state : EngineState,
-    caller : Principal,
+    _caller : Principal,
     callerRole : Types.StaffRole,
     bedId : Nat,
     patientId : Nat,
@@ -829,7 +829,7 @@ module {
 
   public func transferBed(
     state : EngineState,
-    caller : Principal,
+    _caller : Principal,
     callerRole : Types.StaffRole,
     bedId : Nat,
     newBedId : Nat,
@@ -884,7 +884,7 @@ module {
 
   public func dischargeBed(
     state : EngineState,
-    caller : Principal,
+    _caller : Principal,
     callerRole : Types.StaffRole,
     bedId : Nat,
   ) : Types.BedRecord {
@@ -923,7 +923,7 @@ module {
   public func createDiagnosisTemplate(
     state : EngineState,
     caller : Principal,
-    callerRole : Types.StaffRole,
+    _callerRole : Types.StaffRole,
     diagnosisName : Text,
     diagnosisNameBn : ?Text,
     icdCode : ?Text,
@@ -953,8 +953,8 @@ module {
 
   public func updateDiagnosisTemplate(
     state : EngineState,
-    caller : Principal,
-    callerRole : Types.StaffRole,
+    _caller : Principal,
+    _callerRole : Types.StaffRole,
     id : Nat,
     diagnosisName : Text,
     diagnosisNameBn : ?Text,

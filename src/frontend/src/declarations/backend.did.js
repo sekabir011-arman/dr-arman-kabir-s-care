@@ -113,6 +113,36 @@ export const UserRole = IDL.Variant({
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
+export const Time = IDL.Int;
+export const Gender = IDL.Variant({
+  'other' : IDL.Null,
+  'female' : IDL.Null,
+  'male' : IDL.Null,
+});
+export const PatientType = IDL.Variant({
+  'admitted' : IDL.Null,
+  'outdoor' : IDL.Null,
+});
+export const Patient = IDL.Record({
+  'id' : IDL.Nat,
+  'weight' : IDL.Opt(IDL.Float64),
+  'height' : IDL.Opt(IDL.Float64),
+  'consultantEmail' : IDL.Opt(IDL.Text),
+  'nameBn' : IDL.Opt(IDL.Text),
+  'consultantName' : IDL.Opt(IDL.Text),
+  'dateOfBirth' : IDL.Opt(Time),
+  'createdAt' : Time,
+  'fullName' : IDL.Text,
+  'email' : IDL.Opt(IDL.Text),
+  'pastSurgicalHistory' : IDL.Opt(IDL.Text),
+  'bloodGroup' : IDL.Opt(IDL.Text),
+  'address' : IDL.Opt(IDL.Text),
+  'gender' : Gender,
+  'patientType' : PatientType,
+  'chronicConditions' : IDL.Vec(IDL.Text),
+  'phone' : IDL.Opt(IDL.Text),
+  'allergies' : IDL.Vec(IDL.Text),
+});
 export const NoteType = IDL.Variant({
   'SOAP' : IDL.Null,
   'Nursing' : IDL.Null,
@@ -206,34 +236,6 @@ export const ClinicalOrder = IDL.Record({
   'versionInfo' : VersionedRecord,
   'encounterId' : IDL.Opt(IDL.Nat),
 });
-export const Time = IDL.Int;
-export const Gender = IDL.Variant({
-  'other' : IDL.Null,
-  'female' : IDL.Null,
-  'male' : IDL.Null,
-});
-export const PatientType = IDL.Variant({
-  'admitted' : IDL.Null,
-  'outdoor' : IDL.Null,
-});
-export const Patient = IDL.Record({
-  'id' : IDL.Nat,
-  'weight' : IDL.Opt(IDL.Float64),
-  'height' : IDL.Opt(IDL.Float64),
-  'nameBn' : IDL.Opt(IDL.Text),
-  'dateOfBirth' : IDL.Opt(Time),
-  'createdAt' : Time,
-  'fullName' : IDL.Text,
-  'email' : IDL.Opt(IDL.Text),
-  'pastSurgicalHistory' : IDL.Opt(IDL.Text),
-  'bloodGroup' : IDL.Opt(IDL.Text),
-  'address' : IDL.Opt(IDL.Text),
-  'gender' : Gender,
-  'patientType' : PatientType,
-  'chronicConditions' : IDL.Vec(IDL.Text),
-  'phone' : IDL.Opt(IDL.Text),
-  'allergies' : IDL.Vec(IDL.Text),
-});
 export const Medication = IDL.Record({
   'duration' : IDL.Text,
   'dose' : IDL.Text,
@@ -322,6 +324,7 @@ export const idlService = IDL.Service({
       [],
     ),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'assignConsultant' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [Patient], []),
   'createBedRecord' : IDL.Func(
       [IDL.Text, IDL.Text],
       [IDL.Variant({ 'ok' : BedRecord, 'err' : IDL.Text })],
@@ -406,6 +409,8 @@ export const idlService = IDL.Service({
         IDL.Vec(IDL.Text),
         IDL.Opt(IDL.Text),
         PatientType,
+        IDL.Opt(IDL.Text),
+        IDL.Opt(IDL.Text),
       ],
       [Patient],
       [],
@@ -604,6 +609,8 @@ export const idlService = IDL.Service({
         IDL.Vec(IDL.Text),
         IDL.Opt(IDL.Text),
         PatientType,
+        IDL.Opt(IDL.Text),
+        IDL.Opt(IDL.Text),
       ],
       [Patient],
       [],
@@ -747,6 +754,36 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
+  const Time = IDL.Int;
+  const Gender = IDL.Variant({
+    'other' : IDL.Null,
+    'female' : IDL.Null,
+    'male' : IDL.Null,
+  });
+  const PatientType = IDL.Variant({
+    'admitted' : IDL.Null,
+    'outdoor' : IDL.Null,
+  });
+  const Patient = IDL.Record({
+    'id' : IDL.Nat,
+    'weight' : IDL.Opt(IDL.Float64),
+    'height' : IDL.Opt(IDL.Float64),
+    'consultantEmail' : IDL.Opt(IDL.Text),
+    'nameBn' : IDL.Opt(IDL.Text),
+    'consultantName' : IDL.Opt(IDL.Text),
+    'dateOfBirth' : IDL.Opt(Time),
+    'createdAt' : Time,
+    'fullName' : IDL.Text,
+    'email' : IDL.Opt(IDL.Text),
+    'pastSurgicalHistory' : IDL.Opt(IDL.Text),
+    'bloodGroup' : IDL.Opt(IDL.Text),
+    'address' : IDL.Opt(IDL.Text),
+    'gender' : Gender,
+    'patientType' : PatientType,
+    'chronicConditions' : IDL.Vec(IDL.Text),
+    'phone' : IDL.Opt(IDL.Text),
+    'allergies' : IDL.Vec(IDL.Text),
+  });
   const NoteType = IDL.Variant({
     'SOAP' : IDL.Null,
     'Nursing' : IDL.Null,
@@ -840,34 +877,6 @@ export const idlFactory = ({ IDL }) => {
     'versionInfo' : VersionedRecord,
     'encounterId' : IDL.Opt(IDL.Nat),
   });
-  const Time = IDL.Int;
-  const Gender = IDL.Variant({
-    'other' : IDL.Null,
-    'female' : IDL.Null,
-    'male' : IDL.Null,
-  });
-  const PatientType = IDL.Variant({
-    'admitted' : IDL.Null,
-    'outdoor' : IDL.Null,
-  });
-  const Patient = IDL.Record({
-    'id' : IDL.Nat,
-    'weight' : IDL.Opt(IDL.Float64),
-    'height' : IDL.Opt(IDL.Float64),
-    'nameBn' : IDL.Opt(IDL.Text),
-    'dateOfBirth' : IDL.Opt(Time),
-    'createdAt' : Time,
-    'fullName' : IDL.Text,
-    'email' : IDL.Opt(IDL.Text),
-    'pastSurgicalHistory' : IDL.Opt(IDL.Text),
-    'bloodGroup' : IDL.Opt(IDL.Text),
-    'address' : IDL.Opt(IDL.Text),
-    'gender' : Gender,
-    'patientType' : PatientType,
-    'chronicConditions' : IDL.Vec(IDL.Text),
-    'phone' : IDL.Opt(IDL.Text),
-    'allergies' : IDL.Vec(IDL.Text),
-  });
   const Medication = IDL.Record({
     'duration' : IDL.Text,
     'dose' : IDL.Text,
@@ -956,6 +965,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'assignConsultant' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [Patient], []),
     'createBedRecord' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'ok' : BedRecord, 'err' : IDL.Text })],
@@ -1040,6 +1050,8 @@ export const idlFactory = ({ IDL }) => {
           IDL.Vec(IDL.Text),
           IDL.Opt(IDL.Text),
           PatientType,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
         ],
         [Patient],
         [],
@@ -1248,6 +1260,8 @@ export const idlFactory = ({ IDL }) => {
           IDL.Vec(IDL.Text),
           IDL.Opt(IDL.Text),
           PatientType,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
         ],
         [Patient],
         [],

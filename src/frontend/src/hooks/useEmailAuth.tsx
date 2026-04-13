@@ -235,6 +235,18 @@ export function EmailAuthProvider({ children }: { children: React.ReactNode }) {
       setAuthError(null);
       try {
         const registry = loadRegistry();
+        const patientRegistry = loadPatientRegistry();
+
+        // Global cross-check: email must not exist in ANY registry
+        const existingInPatients = patientRegistry.find(
+          (p) =>
+            (p as unknown as { email?: string }).email?.toLowerCase() ===
+            data.email.toLowerCase(),
+        );
+        if (existingInPatients) {
+          throw new Error("This email is already registered in the system.");
+        }
+
         const existing = registry.find(
           (d) => d.email.toLowerCase() === data.email.toLowerCase(),
         );
@@ -254,7 +266,7 @@ export function EmailAuthProvider({ children }: { children: React.ReactNode }) {
               "Your account has been re-submitted for approval. Please wait for admin approval.",
             );
           }
-          throw new Error("An account with this email already exists.");
+          throw new Error("This email is already registered in the system.");
         }
         const { password, ...rest } = data;
         const newDoctor: DoctorAccount = {
@@ -480,6 +492,9 @@ export function EmailAuthProvider({ children }: { children: React.ReactNode }) {
             : String(rawId);
 
         const registry = loadPatientRegistry();
+
+        // Global cross-check: phone used as identifier, but also check doctor registry for email collision
+        // (patients use phone as login key; check email field if present)
 
         // Check duplicate by phone
         const existingByPhone = registry.find((p) => p.phone === phone);
