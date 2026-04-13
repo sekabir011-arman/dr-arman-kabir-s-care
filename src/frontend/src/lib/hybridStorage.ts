@@ -1,11 +1,15 @@
 // ─── Hybrid Storage Layer ─────────────────────────────────────────────────────
 // Wraps localStorage (offline-first ground truth) + canister backend (cloud sync).
 // Strategy:
-//   READ  → try canister first, fallback to localStorage silently
+//   READ  → try canister first when online, fallback to localStorage silently
 //   WRITE → always write localStorage immediately, queue for canister sync
-//   SYNC  → background flush of sync queue every 5 seconds when online
+//   SYNC  → background flush of sync queue + pull of remote updates every 15s
 
-import { loadFromStorage, saveToStorage } from "../hooks/useQueries";
+import {
+  loadFromStorage,
+  saveToStorage,
+  storageKey,
+} from "../hooks/useQueries";
 
 export interface SyncQueueItem {
   id: string;
@@ -156,7 +160,6 @@ function gatherAllLocalData(): {
     } catch {}
   }
 
-  // Deduplicate by id
   const dedup = <T extends { id: unknown }>(arr: T[]): T[] => {
     const seen = new Set<string>();
     return arr.filter((item) => {
@@ -183,7 +186,8 @@ function gatherAllLocalData(): {
  * Marks migration done so it never runs again.
  */
 export async function runMigration(
-  actor: any, // actor interface is dynamic canister shape
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  actor: any,
   onProgress?: (p: MigrationProgress) => void,
 ): Promise<{ migrated: number; skipped: number }> {
   if (isMigrationDone()) {
@@ -228,7 +232,6 @@ export async function runMigration(
       return { migrated: totalItems, skipped: 0 };
     }
 
-    // Backend returned an error — don't mark done, allow retry
     console.warn("Migration backend error:", result.err);
     return { migrated: 0, skipped: totalItems };
   } catch (err) {
@@ -243,10 +246,10 @@ const MAX_RETRIES = 3;
 
 /**
  * Record a device sync heartbeat with the canister.
- * Non-critical: failures are silently ignored.
  */
 export async function recordSyncHeartbeat(
-  actor: any, // actor interface is dynamic canister shape
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  actor: any,
 ): Promise<void> {
   if (!isNetworkOnline() || !actor) return;
   try {
@@ -258,12 +261,10 @@ export async function recordSyncHeartbeat(
 
 /**
  * Flush the sync queue to the canister.
- * Each item describes an operation; we call the matching canister method.
- * Items that succeed are removed; failed items increment retryCount.
- * Items exceeding MAX_RETRIES are dropped (data is safe in localStorage).
  */
 export async function flushSyncQueue(
-  actor: any, // actor interface is dynamic canister shape
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  actor: any,
 ): Promise<{ success: number; failed: number }> {
   if (!isNetworkOnline() || !actor) {
     return { success: 0, failed: 0 };
@@ -278,7 +279,6 @@ export async function flushSyncQueue(
 
   for (const item of queue) {
     if (item.retryCount >= MAX_RETRIES) {
-      // Drop after too many retries — data is safe in localStorage
       failed++;
       continue;
     }
@@ -299,13 +299,11 @@ export async function flushSyncQueue(
   return { success, failed };
 }
 
-// dynamic dispatch to canister based on sync item entity type
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function dispatchSyncItem(
   actor: any,
   item: SyncQueueItem,
 ): Promise<void> {
-  // This is a best-effort background sync. We only handle the most common cases.
-  // The canister is the authoritative store after migration; localStorage is the cache.
   switch (item.entityType) {
     case "patient": {
       if (item.operation === "delete") {
@@ -328,4 +326,107 @@ async function dispatchSyncItem(
     default:
       break;
   }
+}
+
+// ── Poll canister for remote updates ─────────────────────────────────────────
+// This is the CRITICAL function for cross-device sync.
+// It fetches the latest data from the canister and merges it into localStorage,
+// so both devices always see the same source of truth.
+
+/**
+ * Pull all patients, visits, and prescriptions from the canister and
+ * write them into localStorage as the offline cache.
+ * This runs every 15s and on every network reconnect.
+ *
+ * Returns true if any data was updated (useful for triggering cache invalidation).
+ */
+export async function pollAndUpdateFromCanister(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  actor: any,
+): Promise<boolean> {
+  if (!isNetworkOnline() || !actor) return false;
+
+  let updated = false;
+
+  try {
+    // ── Pull patients ────────────────────────────────────────────────────────
+    const remotePatients = await actor.getAllPatients();
+    if (Array.isArray(remotePatients) && remotePatients.length > 0) {
+      // Merge remote into the current doctor's localStorage key
+      const key = storageKey("patients");
+      const local = loadFromStorage<{ id: unknown }>(key);
+      const localIds = new Set(local.map((p) => String(p.id)));
+      const toAdd = remotePatients.filter(
+        (p: { id: unknown }) => !localIds.has(String(p.id)),
+      );
+      if (toAdd.length > 0) {
+        saveToStorage(key, [...local, ...toAdd]);
+        updated = true;
+      }
+      // Also update existing records from remote (canister is authoritative)
+      const merged = mergeByIdPreferRemote(local, remotePatients);
+      if (JSON.stringify(merged) !== JSON.stringify(local)) {
+        saveToStorage(key, merged);
+        updated = true;
+      }
+    }
+  } catch {
+    // Silent fail — offline fallback stays intact
+  }
+
+  try {
+    // ── Pull visits ──────────────────────────────────────────────────────────
+    const remoteVisits = await actor.getAllVisits();
+    if (Array.isArray(remoteVisits) && remoteVisits.length > 0) {
+      const key = storageKey("visits");
+      const local = loadFromStorage<{ id: unknown }>(key);
+      const merged = mergeByIdPreferRemote(local, remoteVisits);
+      if (JSON.stringify(merged) !== JSON.stringify(local)) {
+        saveToStorage(key, merged);
+        updated = true;
+      }
+    }
+  } catch {}
+
+  try {
+    // ── Pull prescriptions ───────────────────────────────────────────────────
+    const remotePrescriptions = await actor.getAllPrescriptions();
+    if (Array.isArray(remotePrescriptions) && remotePrescriptions.length > 0) {
+      const key = storageKey("prescriptions");
+      const local = loadFromStorage<{ id: unknown }>(key);
+      const merged = mergeByIdPreferRemote(local, remotePrescriptions);
+      if (JSON.stringify(merged) !== JSON.stringify(local)) {
+        saveToStorage(key, merged);
+        updated = true;
+      }
+    }
+  } catch {}
+
+  if (updated) {
+    localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+  }
+
+  return updated;
+}
+
+/** Merge two arrays by id, with remote taking precedence for matching ids */
+function mergeByIdPreferRemote<T extends { id: unknown }>(
+  local: T[],
+  remote: T[],
+): T[] {
+  const remoteMap = new Map<string, T>();
+  for (const item of remote) {
+    remoteMap.set(String(item.id), item);
+  }
+  // Start with local, overwrite if remote has updated version
+  const result: T[] = local.map((item) => {
+    const remoteItem = remoteMap.get(String(item.id));
+    return remoteItem ?? item;
+  });
+  // Add items that exist remotely but not locally
+  for (const item of remote) {
+    const exists = result.some((r) => String(r.id) === String(item.id));
+    if (!exists) result.push(item);
+  }
+  return result;
 }

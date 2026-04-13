@@ -24,6 +24,23 @@ import type {
   VitalSigns,
 } from "../types";
 
+// ─── Canister actor singleton ────────────────────────────────────────────────
+// App.tsx calls setCanisterActor(actor) once after it creates the actor.
+// Query functions call getCanisterActor() to read from canister when online.
+// This avoids prop-drilling the actor through every component.
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _canisterActor: any | null = null;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function setCanisterActor(actor: any): void {
+  _canisterActor = actor;
+}
+
+function canUseCanister(): boolean {
+  return _canisterActor !== null && navigator.onLine;
+}
+
 // ─── BigInt serialization helpers ───────────────────────────────────────────
 
 function serializeBigInt(value: unknown): unknown {
@@ -158,6 +175,26 @@ function nextId<T extends { id: bigint }>(items: T[]): bigint {
   return items.reduce((max, item) => (item.id > max ? item.id : max), 0n) + 1n;
 }
 
+/** Merge two arrays by id, remote takes precedence for matching records */
+function mergeArraysById<T extends { id: unknown }>(
+  local: T[],
+  remote: T[],
+): T[] {
+  const remoteMap = new Map<string, T>();
+  for (const item of remote) {
+    remoteMap.set(String(item.id), item);
+  }
+  const result: T[] = local.map(
+    (item) => remoteMap.get(String(item.id)) ?? item,
+  );
+  for (const item of remote) {
+    if (!result.some((r) => String(r.id) === String(item.id))) {
+      result.push(item);
+    }
+  }
+  return result;
+}
+
 // ─── Register number generator ───────────────────────────────────────────────
 
 export function generateRegisterNumber(): string {
@@ -213,8 +250,25 @@ export function useGetAllPatients() {
   return useQuery<Patient[]>({
     queryKey: ["patients"],
     queryFn: async () => {
+      // When online: fetch from canister (single source of truth for all devices),
+      // update localStorage as offline cache, then return merged list.
+      if (canUseCanister()) {
+        try {
+          const remote = (await _canisterActor.getAllPatients()) as Patient[];
+          if (Array.isArray(remote) && remote.length > 0) {
+            const key = storageKey("patients");
+            const local = loadFromStorage<Patient>(key);
+            const merged = mergeArraysById(local, remote);
+            saveToStorage(key, merged);
+            return merged;
+          }
+        } catch {
+          // Silently fall through to localStorage
+        }
+      }
       return loadFromStorage<Patient>(storageKey("patients"));
     },
+    refetchInterval: 15_000,
   });
 }
 
@@ -223,15 +277,34 @@ export function useGetPatient(id: bigint | null) {
     queryKey: ["patient", id?.toString()],
     queryFn: async () => {
       if (!id) return null;
-      // First try the current doctor's key
+      // When online: fetch fresh from canister
+      if (canUseCanister()) {
+        try {
+          const remote = (await _canisterActor.getPatient(
+            id,
+          )) as Patient | null;
+          if (remote) {
+            // Update localStorage cache
+            const key = storageKey("patients");
+            const local = loadFromStorage<Patient>(key);
+            const updated = local.some((p) => p.id === id)
+              ? local.map((p) => (p.id === id ? remote : p))
+              : [...local, remote];
+            saveToStorage(key, updated);
+            return remote;
+          }
+        } catch {
+          // Fall through to localStorage
+        }
+      }
       const primary = loadFromStorage<Patient>(storageKey("patients"));
       const found = primary.find((p) => p.id === id);
       if (found) return found;
-      // Fallback: scan all patients_* keys (needed when patient is logged in without a doctor session)
       const all = loadFromAllDoctorKeys<Patient>("patients");
       return all.find((p) => p.id === id) ?? null;
     },
     enabled: !!id,
+    refetchInterval: 15_000,
   });
 }
 
@@ -374,14 +447,31 @@ export function useGetVisitsByPatient(patientId: bigint | null) {
     queryKey: ["visits", patientId?.toString()],
     queryFn: async () => {
       if (!patientId) return [];
+      // When online: fetch from canister
+      if (canUseCanister()) {
+        try {
+          const remote = (await _canisterActor.getVisitsByPatientId(
+            patientId,
+          )) as Visit[];
+          if (Array.isArray(remote)) {
+            const key = storageKey("visits");
+            const local = loadFromStorage<Visit>(key);
+            const merged = mergeArraysById(local, remote);
+            saveToStorage(key, merged);
+            return merged.filter((v) => v.patientId === patientId);
+          }
+        } catch {
+          // Fall through to localStorage
+        }
+      }
       const primary = loadFromStorage<Visit>(storageKey("visits"));
       const found = primary.filter((v) => v.patientId === patientId);
       if (found.length > 0) return found;
-      // Fallback: scan all visits_* keys
       const all = loadFromAllDoctorKeys<Visit>("visits");
       return all.filter((v) => v.patientId === patientId);
     },
     enabled: !!patientId,
+    refetchInterval: 15_000,
   });
 }
 
@@ -490,16 +580,33 @@ export function useGetPrescriptionsByPatient(patientId: bigint | null) {
     queryKey: ["prescriptions", patientId?.toString()],
     queryFn: async () => {
       if (!patientId) return [];
+      // When online: fetch from canister
+      if (canUseCanister()) {
+        try {
+          const remote = (await _canisterActor.getPrescriptionsByPatientId(
+            patientId,
+          )) as Prescription[];
+          if (Array.isArray(remote)) {
+            const key = storageKey("prescriptions");
+            const local = loadFromStorage<Prescription>(key);
+            const merged = mergeArraysById(local, remote);
+            saveToStorage(key, merged);
+            return merged.filter((p) => p.patientId === patientId);
+          }
+        } catch {
+          // Fall through to localStorage
+        }
+      }
       const primary = loadFromStorage<Prescription>(
         storageKey("prescriptions"),
       );
       const found = primary.filter((p) => p.patientId === patientId);
       if (found.length > 0) return found;
-      // Fallback: scan all prescriptions_* keys
       const all = loadFromAllDoctorKeys<Prescription>("prescriptions");
       return all.filter((p) => p.patientId === patientId);
     },
     enabled: !!patientId,
+    refetchInterval: 15_000,
   });
 }
 

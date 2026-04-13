@@ -1,14 +1,18 @@
-// ─── Migration Hook ───────────────────────────────────────────────────────────
+// ─── Migration & Sync Hook ────────────────────────────────────────────────────
 // Handles one-time transparent migration from localStorage → canister.
-// Runs automatically on first mount if not previously done.
-// Shows a brief toast (not an intrusive modal) during migration.
+// Also drives the 15-second polling loop that keeps all devices in sync:
+//   1. Flush pending local writes → canister
+//   2. Pull remote updates from canister → localStorage
+//   3. Invalidate React Query cache so both devices show fresh data
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type MigrationProgress,
+  flushSyncQueue,
   isMigrationDone,
   isNetworkOnline,
   markMigrationDone,
+  pollAndUpdateFromCanister,
   recordSyncHeartbeat,
   runMigration,
 } from "../lib/hybridStorage";
@@ -30,7 +34,10 @@ const DEFAULT_PROGRESS: MigrationProgress = {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useMigration(
-  actor: any | null, // dynamic canister interface
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  actor: any | null,
+  /** Optional: pass queryClient.invalidateQueries so the sync loop triggers UI refresh */
+  invalidateAll?: () => void,
 ): MigrationState {
   const [status, setStatus] = useState<MigrationStatus>("idle");
   const [progress, setProgress] = useState<MigrationProgress>(DEFAULT_PROGRESS);
@@ -40,21 +47,16 @@ export function useMigration(
   const doMigration = useCallback(async () => {
     if (!actor || hasRunRef.current) return;
     if (isMigrationDone()) {
-      // Migration already complete — just run heartbeat
       await recordSyncHeartbeat(actor);
       return;
     }
 
-    if (!isNetworkOnline()) {
-      // Skip gracefully — will retry next time online
-      return;
-    }
+    if (!isNetworkOnline()) return;
 
     hasRunRef.current = true;
     setStatus("running");
     setProgress({ total: 0, migrated: 0, message: "Preparing sync…" });
 
-    // Brief delay so the toast has time to show
     await new Promise((r) => setTimeout(r, 500));
 
     try {
@@ -69,11 +71,37 @@ export function useMigration(
       setStatus("complete");
     } catch (err) {
       console.warn("Migration failed:", err);
-      // Don't block the app — localStorage is still the ground truth
       setStatus("failed");
-      hasRunRef.current = false; // allow retry
+      hasRunRef.current = false;
     }
   }, [actor]);
+
+  // ── Full sync cycle: flush writes + pull remote + invalidate cache ───────────
+  const doSyncCycle = useCallback(async () => {
+    if (!actor || !isNetworkOnline()) return;
+    try {
+      // 1. Push any pending local writes to canister
+      await flushSyncQueue(actor);
+
+      // 2. Pull remote updates from canister into localStorage
+      const hadUpdates = await pollAndUpdateFromCanister(actor);
+
+      // 3. Always invalidate React Query cache so pages re-read from localStorage
+      //    (which now contains the freshest canister data)
+      if (hadUpdates && invalidateAll) {
+        invalidateAll();
+      } else if (invalidateAll) {
+        // Even without detected updates, invalidate to pick up any
+        // canister data that differs from stale query cache
+        invalidateAll();
+      }
+
+      // 4. Record heartbeat
+      await recordSyncHeartbeat(actor);
+    } catch (err) {
+      console.warn("Sync cycle error:", err);
+    }
+  }, [actor, invalidateAll]);
 
   // Auto-run migration on mount when actor becomes available
   useEffect(() => {
@@ -81,37 +109,51 @@ export function useMigration(
     doMigration();
   }, [actor, doMigration]);
 
-  // Background sync heartbeat every 5 seconds when online
+  // ── Polling loop: runs every 15s ─────────────────────────────────────────────
   useEffect(() => {
     if (!actor) return;
 
-    const runHeartbeat = async () => {
-      if (isNetworkOnline()) {
-        await recordSyncHeartbeat(actor);
-      }
-    };
+    // Run once immediately after mount (staggered 2s to let migration go first)
+    const initialTimer = setTimeout(() => doSyncCycle(), 2000);
 
-    syncIntervalRef.current = setInterval(runHeartbeat, 5000);
+    syncIntervalRef.current = setInterval(doSyncCycle, 15_000);
     return () => {
+      clearTimeout(initialTimer);
       if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
     };
-  }, [actor]);
+  }, [actor, doSyncCycle]);
 
-  // Re-attempt migration when coming back online
+  // ── On window 'online' event: immediate flush + poll ─────────────────────────
   useEffect(() => {
     const handleOnline = () => {
+      // Retry migration if not done
       if (!isMigrationDone() && actor && !hasRunRef.current) {
         doMigration();
       }
+      // Immediately sync and invalidate so the newly-online device gets
+      // all changes made by the other device while this one was offline
+      doSyncCycle();
     };
     window.addEventListener("online", handleOnline);
     return () => window.removeEventListener("online", handleOnline);
-  }, [actor, doMigration]);
+  }, [actor, doMigration, doSyncCycle]);
+
+  // ── On window focus: trigger a sync so switching back to the tab refreshes ──
+  useEffect(() => {
+    const handleFocus = () => {
+      doSyncCycle();
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) handleFocus();
+    });
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [doSyncCycle]);
 
   const runManualMigration = useCallback(() => {
     if (status === "running") return;
-    // Force re-run (clear the done flag is NOT done here — manual migration
-    // is additive, not destructive)
     hasRunRef.current = false;
     doMigration();
   }, [status, doMigration]);

@@ -18,6 +18,7 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Outlet,
   RouterProvider,
@@ -39,6 +40,7 @@ import {
 import { motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Layout from "./Layout";
+import { createActor } from "./backend";
 import { useAdminAuth } from "./hooks/useAdminAuth";
 import {
   EmailAuthProvider,
@@ -51,6 +53,7 @@ import {
 } from "./hooks/useEmailAuth";
 import type { DoctorAccount, PatientAccount } from "./hooks/useEmailAuth";
 import { useMigration } from "./hooks/useMigration";
+import { setCanisterActor } from "./hooks/useQueries";
 import Appointments from "./pages/Appointments";
 import AuditLog from "./pages/AuditLog";
 import BedManagement from "./pages/BedManagement";
@@ -1035,8 +1038,59 @@ function AppInner() {
   const [pendingCount, setPendingCount] = useState(0);
   const [authTab, setAuthTab] = useState("staff");
 
+  // ── Canister actor + cross-device sync setup ─────────────────────────────────
+  const queryClient = useQueryClient();
+
+  // Create anonymous canister actor once on mount.
+  // Anonymous reads work for all query methods (no auth required on canister).
+  const canisterActorRef = useRef<ReturnType<typeof createActor> | null>(null);
+  useEffect(() => {
+    try {
+      const canisterId =
+        ((window as unknown as Record<string, unknown>)
+          .CANISTER_ID_BACKEND as string) ??
+        (import.meta as unknown as Record<string, Record<string, string>>).env
+          ?.CANISTER_ID_BACKEND ??
+        "";
+      if (!canisterId) return;
+      const actor = createActor(
+        canisterId,
+        async (file) => {
+          const bytes = await file.getBytes();
+          return new Uint8Array(bytes.buffer as ArrayBuffer);
+        },
+        async (bytes) => {
+          const { ExternalBlob } = await import("./backend");
+          return ExternalBlob.fromBytes(
+            new Uint8Array(bytes.buffer as ArrayBuffer),
+          );
+        },
+      );
+      canisterActorRef.current = actor;
+      setCanisterActor(actor);
+    } catch (err) {
+      console.warn("Could not create canister actor:", err);
+    }
+  }, []);
+
+  // invalidateAll: called by useMigration after every successful poll cycle
+  // so React Query re-fetches from the updated localStorage cache.
+  const invalidateAll = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["patients"] });
+    queryClient.invalidateQueries({ queryKey: ["patient"] });
+    queryClient.invalidateQueries({ queryKey: ["visits"] });
+    queryClient.invalidateQueries({ queryKey: ["prescriptions"] });
+    queryClient.invalidateQueries({ queryKey: ["observations"] });
+    queryClient.invalidateQueries({ queryKey: ["orders"] });
+    queryClient.invalidateQueries({ queryKey: ["clinicalNotes"] });
+    queryClient.invalidateQueries({ queryKey: ["alerts"] });
+  }, [queryClient]);
+
   // ── Migration toast ──────────────────────────────────────────────────────────
-  const { migrationStatus } = useMigration(null);
+  const { migrationStatus } = useMigration(
+    canisterActorRef.current,
+    invalidateAll,
+  );
   const migrationToastShownRef = useRef(false);
   useEffect(() => {
     if (migrationStatus === "running" && !migrationToastShownRef.current) {
