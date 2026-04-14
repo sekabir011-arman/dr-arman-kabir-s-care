@@ -84,15 +84,11 @@ export function useMigration(
       await flushSyncQueue(actor);
 
       // 2. Pull remote updates from canister into localStorage
-      const hadUpdates = await pollAndUpdateFromCanister(actor);
+      await pollAndUpdateFromCanister(actor);
 
       // 3. Always invalidate React Query cache so pages re-read from localStorage
-      //    (which now contains the freshest canister data)
-      if (hadUpdates && invalidateAll) {
-        invalidateAll();
-      } else if (invalidateAll) {
-        // Even without detected updates, invalidate to pick up any
-        // canister data that differs from stale query cache
+      //    (which now contains the freshest canister data from ALL devices)
+      if (invalidateAll) {
         invalidateAll();
       }
 

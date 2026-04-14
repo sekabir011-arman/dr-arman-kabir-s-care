@@ -13,9 +13,9 @@ import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 import ClinicalDataEngineLib "lib/clinical-data-engine";
 import ClinicalDataEngineMixin "mixins/clinical-data-engine-api";
-import Migration "migration";
 
-(with migration = Migration.run)
+
+
 actor {
   ///////////////////////////////
   // Custom Types and Modules  //

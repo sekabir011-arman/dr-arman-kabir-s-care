@@ -119,27 +119,61 @@ export function loadFromAllDoctorKeys<T>(prefix: string): T[] {
 
 // ─── Doctor email helper ─────────────────────────────────────────────────────
 
+const CANONICAL_EMAIL_KEY = "app_current_user_email";
+
+/**
+ * Returns the canonical email for the currently logged-in user.
+ * Checks the canonical key first (most reliable across sessions/devices),
+ * then falls back to legacy keys and writes the result back to the canonical
+ * key so the next call is instant.
+ */
 export function getDoctorEmail(): string {
   try {
-    // First try the staff_auth key (legacy)
+    // 1. Canonical key — written on every successful login
+    const canonical = localStorage.getItem(CANONICAL_EMAIL_KEY);
+    if (canonical) return canonical;
+
+    // 2. Legacy staff_auth key
     const raw = localStorage.getItem("staff_auth");
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed?.email) return parsed.email;
+      if (parsed?.email) {
+        localStorage.setItem(CANONICAL_EMAIL_KEY, parsed.email);
+        return parsed.email;
+      }
     }
-    // Fall back to the doctor session
+
+    // 3. Doctor session lookup
     const sessionId = localStorage.getItem("medicare_current_doctor");
     if (sessionId) {
       const registry = JSON.parse(
         localStorage.getItem("medicare_doctors_registry") || "[]",
       ) as Array<{ id: string; email: string }>;
       const doctor = registry.find((d) => d.id === sessionId);
-      if (doctor?.email) return doctor.email;
+      if (doctor?.email) {
+        localStorage.setItem(CANONICAL_EMAIL_KEY, doctor.email);
+        return doctor.email;
+      }
     }
     return "default";
   } catch {
     return "default";
   }
+}
+
+/**
+ * Call this immediately after a successful login to fix the canonical email
+ * key for all subsequent storage operations on this device.
+ */
+export function setCanonicalUserEmail(email: string): void {
+  if (email) localStorage.setItem(CANONICAL_EMAIL_KEY, email);
+}
+
+/**
+ * Call this on logout to clear the canonical email key.
+ */
+export function clearCanonicalUserEmail(): void {
+  localStorage.removeItem(CANONICAL_EMAIL_KEY);
 }
 
 export function storageKey(prefix: string): string {
@@ -354,7 +388,53 @@ export function useCreatePatient() {
         if (data.photo !== undefined) {
           (newPatient as Record<string, unknown>).photo = data.photo;
         }
+        // 1. Always write to localStorage first (offline-first)
         saveToStorage(key, [...patients, newPatient]);
+
+        // 2. Push to canister if online
+        if (canUseCanister()) {
+          try {
+            await _canisterActor.createPatient(
+              data.fullName,
+              data.nameBn ?? null,
+              data.dateOfBirth ?? null,
+              data.gender as Patient["gender"],
+              data.phone ?? null,
+              data.email ?? null,
+              data.address ?? null,
+              data.bloodGroup ?? null,
+              data.weight ?? null,
+              data.height ?? null,
+              data.allergies,
+              data.chronicConditions,
+              data.pastSurgicalHistory ?? null,
+              data.patientType as Patient["patientType"],
+              null,
+              null,
+            );
+          } catch (e) {
+            console.warn(
+              "Canister createPatient failed, queuing for retry:",
+              e,
+            );
+            const { enqueueSync } = await import("../lib/hybridStorage");
+            enqueueSync({
+              timestamp: Date.now(),
+              operation: "create",
+              entityType: "patient",
+              data: newPatient,
+            });
+          }
+        } else {
+          const { enqueueSync } = await import("../lib/hybridStorage");
+          enqueueSync({
+            timestamp: Date.now(),
+            operation: "create",
+            entityType: "patient",
+            data: newPatient,
+          });
+        }
+
         return newPatient;
       } catch (err) {
         console.error("useCreatePatient error:", err);
@@ -389,30 +469,78 @@ export function useUpdatePatient() {
       try {
         const key = storageKey("patients");
         const patients = loadFromStorage<Patient>(key);
+        const updatedPatient = {
+          ...patients.find((p) => p.id === data.id),
+          fullName: data.fullName,
+          nameBn: data.nameBn ?? undefined,
+          dateOfBirth: data.dateOfBirth ?? undefined,
+          gender: data.gender as Patient["gender"],
+          phone: data.phone ?? undefined,
+          email: data.email ?? undefined,
+          address: data.address ?? undefined,
+          bloodGroup: data.bloodGroup ?? undefined,
+          weight: data.weight ?? undefined,
+          height: data.height ?? undefined,
+          allergies: data.allergies,
+          chronicConditions: data.chronicConditions,
+          pastSurgicalHistory: data.pastSurgicalHistory ?? undefined,
+          patientType: data.patientType as Patient["patientType"],
+          ...(data.photo !== undefined ? { photo: data.photo } : {}),
+        } as Patient;
         const updated = patients.map((p) =>
-          p.id === data.id
-            ? {
-                ...p,
-                fullName: data.fullName,
-                nameBn: data.nameBn ?? undefined,
-                dateOfBirth: data.dateOfBirth ?? undefined,
-                gender: data.gender as Patient["gender"],
-                phone: data.phone ?? undefined,
-                email: data.email ?? undefined,
-                address: data.address ?? undefined,
-                bloodGroup: data.bloodGroup ?? undefined,
-                weight: data.weight ?? undefined,
-                height: data.height ?? undefined,
-                allergies: data.allergies,
-                chronicConditions: data.chronicConditions,
-                pastSurgicalHistory: data.pastSurgicalHistory ?? undefined,
-                patientType: data.patientType as Patient["patientType"],
-                ...(data.photo !== undefined ? { photo: data.photo } : {}),
-              }
-            : p,
+          p.id === data.id ? updatedPatient : p,
         );
+        // 1. Always write to localStorage first (offline-first)
         saveToStorage(key, updated);
-        return updated.find((p) => p.id === data.id) as Patient;
+
+        // 2. Push to canister if online
+        if (canUseCanister()) {
+          try {
+            await _canisterActor.updatePatient(
+              data.id,
+              data.fullName,
+              data.nameBn ?? null,
+              data.dateOfBirth ?? null,
+              data.gender as Patient["gender"],
+              data.phone ?? null,
+              data.email ?? null,
+              data.address ?? null,
+              data.bloodGroup ?? null,
+              data.weight ?? null,
+              data.height ?? null,
+              data.allergies,
+              data.chronicConditions,
+              data.pastSurgicalHistory ?? null,
+              data.patientType as Patient["patientType"],
+              null,
+              null,
+            );
+          } catch (e) {
+            console.warn(
+              "Canister updatePatient failed, queuing for retry:",
+              e,
+            );
+            const { enqueueSync } = await import("../lib/hybridStorage");
+            enqueueSync({
+              timestamp: Date.now(),
+              operation: "update",
+              entityType: "patient",
+              entityId: data.id.toString(),
+              data: updatedPatient,
+            });
+          }
+        } else {
+          const { enqueueSync } = await import("../lib/hybridStorage");
+          enqueueSync({
+            timestamp: Date.now(),
+            operation: "update",
+            entityType: "patient",
+            entityId: data.id.toString(),
+            data: updatedPatient,
+          });
+        }
+
+        return updatedPatient;
       } catch (err) {
         console.error("useUpdatePatient error:", err);
         throw new Error("Failed to update patient. Please try again.");
@@ -504,7 +632,43 @@ export function useCreateVisit() {
         visitType: data.visitType as Visit["visitType"],
         createdAt: BigInt(Date.now()) * 1000000n,
       };
+      // 1. Always write to localStorage first (offline-first)
       saveToStorage(key, [...visits, newVisit]);
+
+      // 2. Push to canister if online
+      if (canUseCanister()) {
+        try {
+          await _canisterActor.createVisit(
+            data.patientId,
+            data.visitDate,
+            data.chiefComplaint,
+            data.historyOfPresentIllness ?? null,
+            data.vitalSigns,
+            data.physicalExamination ?? null,
+            data.diagnosis ?? null,
+            data.notes ?? null,
+            data.visitType as Visit["visitType"],
+          );
+        } catch (e) {
+          console.warn("Canister createVisit failed, queuing for retry:", e);
+          const { enqueueSync } = await import("../lib/hybridStorage");
+          enqueueSync({
+            timestamp: Date.now(),
+            operation: "create",
+            entityType: "visit",
+            data: newVisit,
+          });
+        }
+      } else {
+        const { enqueueSync } = await import("../lib/hybridStorage");
+        enqueueSync({
+          timestamp: Date.now(),
+          operation: "create",
+          entityType: "visit",
+          data: newVisit,
+        });
+      }
+
       return newVisit;
     },
     onSuccess: (_, vars) =>
@@ -548,25 +712,60 @@ export function useUpdateVisit() {
     }) => {
       const key = storageKey("visits");
       const visits = loadFromStorage<Visit>(key);
-      const updated = visits.map((v) =>
-        v.id === data.id
-          ? {
-              ...v,
-              patientId: data.patientId,
-              visitDate: data.visitDate,
-              chiefComplaint: data.chiefComplaint,
-              historyOfPresentIllness:
-                data.historyOfPresentIllness ?? undefined,
-              vitalSigns: data.vitalSigns,
-              physicalExamination: data.physicalExamination ?? undefined,
-              diagnosis: data.diagnosis ?? undefined,
-              notes: data.notes ?? undefined,
-              visitType: data.visitType as Visit["visitType"],
-            }
-          : v,
-      );
+      const updatedVisit = {
+        ...visits.find((v) => v.id === data.id),
+        patientId: data.patientId,
+        visitDate: data.visitDate,
+        chiefComplaint: data.chiefComplaint,
+        historyOfPresentIllness: data.historyOfPresentIllness ?? undefined,
+        vitalSigns: data.vitalSigns,
+        physicalExamination: data.physicalExamination ?? undefined,
+        diagnosis: data.diagnosis ?? undefined,
+        notes: data.notes ?? undefined,
+        visitType: data.visitType as Visit["visitType"],
+      } as Visit;
+      const updated = visits.map((v) => (v.id === data.id ? updatedVisit : v));
+      // 1. Always write to localStorage first (offline-first)
       saveToStorage(key, updated);
-      return updated.find((v) => v.id === data.id) as Visit;
+
+      // 2. Push to canister if online
+      if (canUseCanister()) {
+        try {
+          await _canisterActor.updateVisit(
+            data.id,
+            data.patientId,
+            data.visitDate,
+            data.chiefComplaint,
+            data.historyOfPresentIllness ?? null,
+            data.vitalSigns,
+            data.physicalExamination ?? null,
+            data.diagnosis ?? null,
+            data.notes ?? null,
+            data.visitType as Visit["visitType"],
+          );
+        } catch (e) {
+          console.warn("Canister updateVisit failed, queuing for retry:", e);
+          const { enqueueSync } = await import("../lib/hybridStorage");
+          enqueueSync({
+            timestamp: Date.now(),
+            operation: "update",
+            entityType: "visit",
+            entityId: data.id.toString(),
+            data: updatedVisit,
+          });
+        }
+      } else {
+        const { enqueueSync } = await import("../lib/hybridStorage");
+        enqueueSync({
+          timestamp: Date.now(),
+          operation: "update",
+          entityType: "visit",
+          entityId: data.id.toString(),
+          data: updatedVisit,
+        });
+      }
+
+      return updatedVisit;
     },
     onSuccess: (_, vars) =>
       qc.invalidateQueries({ queryKey: ["visits", vars.patientId.toString()] }),
@@ -633,7 +832,43 @@ export function useCreatePrescription() {
         notes: data.notes ?? undefined,
         createdAt: BigInt(Date.now()) * 1000000n,
       };
+      // 1. Always write to localStorage first (offline-first)
       saveToStorage(key, [...prescriptions, newPrescription]);
+
+      // 2. Push to canister if online
+      if (canUseCanister()) {
+        try {
+          await _canisterActor.createPrescription(
+            data.patientId,
+            data.visitId ?? null,
+            data.prescriptionDate,
+            data.diagnosis ?? null,
+            data.medications,
+            data.notes ?? null,
+          );
+        } catch (e) {
+          console.warn(
+            "Canister createPrescription failed, queuing for retry:",
+            e,
+          );
+          const { enqueueSync } = await import("../lib/hybridStorage");
+          enqueueSync({
+            timestamp: Date.now(),
+            operation: "create",
+            entityType: "prescription",
+            data: newPrescription,
+          });
+        }
+      } else {
+        const { enqueueSync } = await import("../lib/hybridStorage");
+        enqueueSync({
+          timestamp: Date.now(),
+          operation: "create",
+          entityType: "prescription",
+          data: newPrescription,
+        });
+      }
+
       return newPrescription;
     },
     onSuccess: (_, vars) =>
@@ -681,20 +916,58 @@ export function useUpdatePrescription() {
     }) => {
       const key = storageKey("prescriptions");
       const prescriptions = loadFromStorage<Prescription>(key);
+      const updatedPrescription = {
+        ...prescriptions.find((p) => p.id === data.id),
+        visitId: data.visitId ?? undefined,
+        prescriptionDate: data.prescriptionDate,
+        diagnosis: data.diagnosis ?? undefined,
+        medications: data.medications,
+        notes: data.notes ?? undefined,
+      } as Prescription;
       const updated = prescriptions.map((p) =>
-        p.id === data.id
-          ? {
-              ...p,
-              visitId: data.visitId ?? undefined,
-              prescriptionDate: data.prescriptionDate,
-              diagnosis: data.diagnosis ?? undefined,
-              medications: data.medications,
-              notes: data.notes ?? undefined,
-            }
-          : p,
+        p.id === data.id ? updatedPrescription : p,
       );
+      // 1. Always write to localStorage first (offline-first)
       saveToStorage(key, updated);
-      return updated.find((p) => p.id === data.id) as Prescription;
+
+      // 2. Push to canister if online
+      if (canUseCanister()) {
+        try {
+          await _canisterActor.updatePrescription(
+            data.id,
+            data.patientId,
+            data.visitId ?? null,
+            data.prescriptionDate,
+            data.diagnosis ?? null,
+            data.medications,
+            data.notes ?? null,
+          );
+        } catch (e) {
+          console.warn(
+            "Canister updatePrescription failed, queuing for retry:",
+            e,
+          );
+          const { enqueueSync } = await import("../lib/hybridStorage");
+          enqueueSync({
+            timestamp: Date.now(),
+            operation: "update",
+            entityType: "prescription",
+            entityId: data.id.toString(),
+            data: updatedPrescription,
+          });
+        }
+      } else {
+        const { enqueueSync } = await import("../lib/hybridStorage");
+        enqueueSync({
+          timestamp: Date.now(),
+          operation: "update",
+          entityType: "prescription",
+          entityId: data.id.toString(),
+          data: updatedPrescription,
+        });
+      }
+
+      return updatedPrescription;
     },
     onSuccess: (_, vars) =>
       qc.invalidateQueries({

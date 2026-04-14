@@ -13,6 +13,9 @@ const SESSION_KEY = "medicare_current_doctor";
 const PATIENT_REGISTRY_KEY = "medicare_patients_auth_registry";
 const PATIENT_SESSION_KEY = "medicare_patient_session";
 const AUDIT_LOG_KEY = "medicare_audit_log";
+// Canonical cross-session email key — used by getDoctorEmail() in useQueries.ts
+// to ensure every device resolves the same storage key prefix after login.
+const CANONICAL_EMAIL_KEY = "app_current_user_email";
 const PATIENT_SIGNUP_MAP_KEY = "medicare_patient_signup_map";
 
 export interface DoctorAccount {
@@ -310,6 +313,7 @@ export function EmailAuthProvider({ children }: { children: React.ReactNode }) {
           "Your account has been rejected. Please contact the admin or re-register.",
         );
       localStorage.setItem(SESSION_KEY, doctor.id);
+      localStorage.setItem(CANONICAL_EMAIL_KEY, doctor.email);
       setCurrentDoctor(doctor);
       appendAuditLog({
         timestamp: new Date().toISOString(),
@@ -338,6 +342,7 @@ export function EmailAuthProvider({ children }: { children: React.ReactNode }) {
       });
     }
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(CANONICAL_EMAIL_KEY);
     setCurrentDoctor(null);
     setAuthError(null);
   }, [currentDoctor]);

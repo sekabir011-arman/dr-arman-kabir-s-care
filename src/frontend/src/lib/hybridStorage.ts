@@ -304,22 +304,116 @@ async function dispatchSyncItem(
   actor: any,
   item: SyncQueueItem,
 ): Promise<void> {
+  // Helper to safely cast data fields
+  const d = item.data as Record<string, unknown>;
+
   switch (item.entityType) {
     case "patient": {
       if (item.operation === "delete") {
         await actor.deletePatient(BigInt(item.entityId ?? "0"));
+      } else if (item.operation === "create") {
+        await actor.createPatient(
+          (d.fullName as string) ?? "",
+          (d.nameBn as string | null) ?? null,
+          d.dateOfBirth != null ? BigInt(String(d.dateOfBirth)) : null,
+          (d.gender as string) ?? "male",
+          (d.phone as string | null) ?? null,
+          (d.email as string | null) ?? null,
+          (d.address as string | null) ?? null,
+          (d.bloodGroup as string | null) ?? null,
+          d.weight != null ? Number(d.weight) : null,
+          d.height != null ? Number(d.height) : null,
+          Array.isArray(d.allergies) ? (d.allergies as string[]) : [],
+          Array.isArray(d.chronicConditions)
+            ? (d.chronicConditions as string[])
+            : [],
+          (d.pastSurgicalHistory as string | null) ?? null,
+          (d.patientType as string) ?? "outdoor",
+          null,
+          null,
+        );
+      } else if (item.operation === "update" && item.entityId) {
+        await actor.updatePatient(
+          BigInt(item.entityId),
+          (d.fullName as string) ?? "",
+          (d.nameBn as string | null) ?? null,
+          d.dateOfBirth != null ? BigInt(String(d.dateOfBirth)) : null,
+          (d.gender as string) ?? "male",
+          (d.phone as string | null) ?? null,
+          (d.email as string | null) ?? null,
+          (d.address as string | null) ?? null,
+          (d.bloodGroup as string | null) ?? null,
+          d.weight != null ? Number(d.weight) : null,
+          d.height != null ? Number(d.height) : null,
+          Array.isArray(d.allergies) ? (d.allergies as string[]) : [],
+          Array.isArray(d.chronicConditions)
+            ? (d.chronicConditions as string[])
+            : [],
+          (d.pastSurgicalHistory as string | null) ?? null,
+          (d.patientType as string) ?? "outdoor",
+          null,
+          null,
+        );
       }
       break;
     }
     case "visit": {
       if (item.operation === "delete") {
         await actor.deleteVisit(BigInt(item.entityId ?? "0"));
+      } else if (item.operation === "create") {
+        await actor.createVisit(
+          d.patientId != null ? BigInt(String(d.patientId)) : 0n,
+          d.visitDate != null ? BigInt(String(d.visitDate)) : 0n,
+          (d.chiefComplaint as string) ?? "",
+          (d.historyOfPresentIllness as string | null) ?? null,
+          (d.vitalSigns as object) ?? {},
+          (d.physicalExamination as string | null) ?? null,
+          (d.diagnosis as string | null) ?? null,
+          (d.notes as string | null) ?? null,
+          (d.visitType as string) ?? "outpatient",
+        );
+      } else if (item.operation === "update" && item.entityId) {
+        await actor.updateVisit(
+          BigInt(item.entityId),
+          d.patientId != null ? BigInt(String(d.patientId)) : 0n,
+          d.visitDate != null ? BigInt(String(d.visitDate)) : 0n,
+          (d.chiefComplaint as string) ?? "",
+          (d.historyOfPresentIllness as string | null) ?? null,
+          (d.vitalSigns as object) ?? {},
+          (d.physicalExamination as string | null) ?? null,
+          (d.diagnosis as string | null) ?? null,
+          (d.notes as string | null) ?? null,
+          (d.visitType as string) ?? "outpatient",
+        );
       }
       break;
     }
     case "prescription": {
       if (item.operation === "delete") {
         await actor.deletePrescription(BigInt(item.entityId ?? "0"));
+      } else if (item.operation === "create") {
+        await actor.createPrescription(
+          d.patientId != null ? BigInt(String(d.patientId)) : 0n,
+          d.visitId != null ? BigInt(String(d.visitId)) : null,
+          d.prescriptionDate != null
+            ? BigInt(String(d.prescriptionDate))
+            : BigInt(Date.now()) * 1_000_000n,
+          (d.diagnosis as string | null) ?? null,
+          Array.isArray(d.medications) ? d.medications : [],
+          (d.notes as string | null) ?? null,
+        );
+      } else if (item.operation === "update" && item.entityId) {
+        await actor.updatePrescription(
+          BigInt(item.entityId),
+          d.patientId != null ? BigInt(String(d.patientId)) : 0n,
+          d.visitId != null ? BigInt(String(d.visitId)) : null,
+          d.prescriptionDate != null
+            ? BigInt(String(d.prescriptionDate))
+            : BigInt(Date.now()) * 1_000_000n,
+          (d.diagnosis as string | null) ?? null,
+          Array.isArray(d.medications) ? d.medications : [],
+          (d.notes as string | null) ?? null,
+        );
       }
       break;
     }
