@@ -143,6 +143,52 @@ export const Patient = IDL.Record({
   'phone' : IDL.Opt(IDL.Text),
   'allergies' : IDL.Vec(IDL.Text),
 });
+export const AppointmentStatus = IDL.Variant({
+  'cancelled' : IDL.Null,
+  'pending' : IDL.Null,
+  'completed' : IDL.Null,
+  'confirmed' : IDL.Null,
+});
+export const AppointmentType = IDL.Variant({
+  'hospital' : IDL.Null,
+  'chamber' : IDL.Null,
+});
+export const Appointment = IDL.Record({
+  'id' : IDL.Text,
+  'status' : AppointmentStatus,
+  'patientId' : IDL.Opt(IDL.Nat),
+  'date' : IDL.Text,
+  'createdAt' : IDL.Int,
+  'chamberName' : IDL.Opt(IDL.Text),
+  'registerNumber' : IDL.Opt(IDL.Text),
+  'appointmentType' : AppointmentType,
+  'updatedAt' : IDL.Int,
+  'serialNumber' : IDL.Opt(IDL.Nat),
+  'notes' : IDL.Opt(IDL.Text),
+  'patientName' : IDL.Text,
+  'hospitalName' : IDL.Opt(IDL.Text),
+  'phone' : IDL.Opt(IDL.Text),
+  'doctorEmail' : IDL.Text,
+  'timeSlot' : IDL.Opt(IDL.Text),
+});
+export const QueueStatus = IDL.Variant({
+  'serving' : IDL.Null,
+  'skipped' : IDL.Null,
+  'done' : IDL.Null,
+  'waiting' : IDL.Null,
+});
+export const SerialQueueEntry = IDL.Record({
+  'id' : IDL.Text,
+  'status' : QueueStatus,
+  'date' : IDL.Text,
+  'createdAt' : IDL.Int,
+  'registerNumber' : IDL.Opt(IDL.Text),
+  'calledAt' : IDL.Opt(IDL.Int),
+  'serialNumber' : IDL.Nat,
+  'patientName' : IDL.Text,
+  'phone' : IDL.Opt(IDL.Text),
+  'doctorEmail' : IDL.Text,
+});
 export const NoteType = IDL.Variant({
   'SOAP' : IDL.Null,
   'Nursing' : IDL.Null,
@@ -325,6 +371,41 @@ export const idlService = IDL.Service({
     ),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'assignConsultant' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [Patient], []),
+  'bulkUpsertAppointments' : IDL.Func(
+      [IDL.Vec(Appointment)],
+      [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+      [],
+    ),
+  'bulkUpsertQueueEntries' : IDL.Func(
+      [IDL.Vec(SerialQueueEntry)],
+      [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+      [],
+    ),
+  'clearQueueByDate' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+      [],
+    ),
+  'createAppointment' : IDL.Func(
+      [
+        IDL.Text,
+        IDL.Opt(IDL.Nat),
+        IDL.Text,
+        IDL.Opt(IDL.Text),
+        IDL.Opt(IDL.Text),
+        AppointmentType,
+        IDL.Opt(IDL.Text),
+        IDL.Opt(IDL.Text),
+        IDL.Text,
+        IDL.Opt(IDL.Text),
+        AppointmentStatus,
+        IDL.Text,
+        IDL.Opt(IDL.Nat),
+        IDL.Opt(IDL.Text),
+      ],
+      [IDL.Variant({ 'ok' : Appointment, 'err' : IDL.Text })],
+      [],
+    ),
   'createBedRecord' : IDL.Func(
       [IDL.Text, IDL.Text],
       [IDL.Variant({ 'ok' : BedRecord, 'err' : IDL.Text })],
@@ -427,6 +508,21 @@ export const idlService = IDL.Service({
       [Prescription],
       [],
     ),
+  'createQueueEntry' : IDL.Func(
+      [
+        IDL.Text,
+        IDL.Text,
+        IDL.Nat,
+        IDL.Text,
+        IDL.Opt(IDL.Text),
+        IDL.Opt(IDL.Text),
+        QueueStatus,
+        IDL.Opt(IDL.Int),
+        IDL.Text,
+      ],
+      [IDL.Variant({ 'ok' : SerialQueueEntry, 'err' : IDL.Text })],
+      [],
+    ),
   'createVisit' : IDL.Func(
       [
         IDL.Nat,
@@ -442,8 +538,18 @@ export const idlService = IDL.Service({
       [Visit],
       [],
     ),
+  'deleteAppointment' : IDL.Func(
+      [IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'deletePatient' : IDL.Func([IDL.Nat], [], []),
   'deletePrescription' : IDL.Func([IDL.Nat], [], []),
+  'deleteQueueEntry' : IDL.Func(
+      [IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'deleteVisit' : IDL.Func([IDL.Nat], [], []),
   'dischargeBed' : IDL.Func(
       [IDL.Nat],
@@ -458,6 +564,11 @@ export const idlService = IDL.Service({
   'getAlertsByPatient' : IDL.Func(
       [IDL.Nat],
       [IDL.Vec(ClinicalAlert)],
+      ['query'],
+    ),
+  'getAllAppointmentsByDoctor' : IDL.Func(
+      [IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Vec(Appointment), 'err' : IDL.Text })],
       ['query'],
     ),
   'getAllAuditEntries' : IDL.Func(
@@ -475,6 +586,21 @@ export const idlService = IDL.Service({
   'getAllPatients' : IDL.Func([], [IDL.Vec(Patient)], ['query']),
   'getAllPrescriptions' : IDL.Func([], [IDL.Vec(Prescription)], ['query']),
   'getAllVisits' : IDL.Func([], [IDL.Vec(Visit)], ['query']),
+  'getAppointmentById' : IDL.Func(
+      [IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Opt(Appointment), 'err' : IDL.Text })],
+      ['query'],
+    ),
+  'getAppointmentsByDoctor' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Vec(Appointment), 'err' : IDL.Text })],
+      ['query'],
+    ),
+  'getAppointmentsSince' : IDL.Func(
+      [IDL.Text, IDL.Int],
+      [IDL.Variant({ 'ok' : IDL.Vec(Appointment), 'err' : IDL.Text })],
+      ['query'],
+    ),
   'getAuditTrail' : IDL.Func(
       [IDL.Nat, IDL.Nat, IDL.Nat],
       [IDL.Vec(AuditEntry)],
@@ -533,6 +659,16 @@ export const idlService = IDL.Service({
       [IDL.Vec(Prescription)],
       ['query'],
     ),
+  'getQueueByDateAndDoctor' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Vec(SerialQueueEntry), 'err' : IDL.Text })],
+      ['query'],
+    ),
+  'getQueueEntriesSince' : IDL.Func(
+      [IDL.Text, IDL.Int],
+      [IDL.Variant({ 'ok' : IDL.Vec(SerialQueueEntry), 'err' : IDL.Text })],
+      ['query'],
+    ),
   'getUnacknowledgedAlerts' : IDL.Func([], [IDL.Vec(ClinicalAlert)], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
@@ -561,6 +697,25 @@ export const idlService = IDL.Service({
   'transferBed' : IDL.Func(
       [IDL.Nat, IDL.Nat, IDL.Text],
       [IDL.Variant({ 'ok' : BedRecord, 'err' : IDL.Text })],
+      [],
+    ),
+  'updateAppointment' : IDL.Func(
+      [
+        IDL.Text,
+        IDL.Opt(IDL.Nat),
+        IDL.Text,
+        IDL.Opt(IDL.Text),
+        IDL.Opt(IDL.Text),
+        AppointmentType,
+        IDL.Opt(IDL.Text),
+        IDL.Opt(IDL.Text),
+        IDL.Text,
+        IDL.Opt(IDL.Text),
+        AppointmentStatus,
+        IDL.Opt(IDL.Nat),
+        IDL.Opt(IDL.Text),
+      ],
+      [IDL.Variant({ 'ok' : Appointment, 'err' : IDL.Text })],
       [],
     ),
   'updateClinicalNote' : IDL.Func(
@@ -626,6 +781,11 @@ export const idlService = IDL.Service({
         IDL.Opt(IDL.Text),
       ],
       [Prescription],
+      [],
+    ),
+  'updateQueueEntry' : IDL.Func(
+      [IDL.Text, QueueStatus, IDL.Opt(IDL.Int)],
+      [IDL.Variant({ 'ok' : SerialQueueEntry, 'err' : IDL.Text })],
       [],
     ),
   'updateVisit' : IDL.Func(
@@ -783,6 +943,52 @@ export const idlFactory = ({ IDL }) => {
     'chronicConditions' : IDL.Vec(IDL.Text),
     'phone' : IDL.Opt(IDL.Text),
     'allergies' : IDL.Vec(IDL.Text),
+  });
+  const AppointmentStatus = IDL.Variant({
+    'cancelled' : IDL.Null,
+    'pending' : IDL.Null,
+    'completed' : IDL.Null,
+    'confirmed' : IDL.Null,
+  });
+  const AppointmentType = IDL.Variant({
+    'hospital' : IDL.Null,
+    'chamber' : IDL.Null,
+  });
+  const Appointment = IDL.Record({
+    'id' : IDL.Text,
+    'status' : AppointmentStatus,
+    'patientId' : IDL.Opt(IDL.Nat),
+    'date' : IDL.Text,
+    'createdAt' : IDL.Int,
+    'chamberName' : IDL.Opt(IDL.Text),
+    'registerNumber' : IDL.Opt(IDL.Text),
+    'appointmentType' : AppointmentType,
+    'updatedAt' : IDL.Int,
+    'serialNumber' : IDL.Opt(IDL.Nat),
+    'notes' : IDL.Opt(IDL.Text),
+    'patientName' : IDL.Text,
+    'hospitalName' : IDL.Opt(IDL.Text),
+    'phone' : IDL.Opt(IDL.Text),
+    'doctorEmail' : IDL.Text,
+    'timeSlot' : IDL.Opt(IDL.Text),
+  });
+  const QueueStatus = IDL.Variant({
+    'serving' : IDL.Null,
+    'skipped' : IDL.Null,
+    'done' : IDL.Null,
+    'waiting' : IDL.Null,
+  });
+  const SerialQueueEntry = IDL.Record({
+    'id' : IDL.Text,
+    'status' : QueueStatus,
+    'date' : IDL.Text,
+    'createdAt' : IDL.Int,
+    'registerNumber' : IDL.Opt(IDL.Text),
+    'calledAt' : IDL.Opt(IDL.Int),
+    'serialNumber' : IDL.Nat,
+    'patientName' : IDL.Text,
+    'phone' : IDL.Opt(IDL.Text),
+    'doctorEmail' : IDL.Text,
   });
   const NoteType = IDL.Variant({
     'SOAP' : IDL.Null,
@@ -966,6 +1172,41 @@ export const idlFactory = ({ IDL }) => {
       ),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'assignConsultant' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [Patient], []),
+    'bulkUpsertAppointments' : IDL.Func(
+        [IDL.Vec(Appointment)],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
+    'bulkUpsertQueueEntries' : IDL.Func(
+        [IDL.Vec(SerialQueueEntry)],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
+    'clearQueueByDate' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
+    'createAppointment' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Nat),
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          AppointmentType,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          AppointmentStatus,
+          IDL.Text,
+          IDL.Opt(IDL.Nat),
+          IDL.Opt(IDL.Text),
+        ],
+        [IDL.Variant({ 'ok' : Appointment, 'err' : IDL.Text })],
+        [],
+      ),
     'createBedRecord' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'ok' : BedRecord, 'err' : IDL.Text })],
@@ -1068,6 +1309,21 @@ export const idlFactory = ({ IDL }) => {
         [Prescription],
         [],
       ),
+    'createQueueEntry' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Nat,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          QueueStatus,
+          IDL.Opt(IDL.Int),
+          IDL.Text,
+        ],
+        [IDL.Variant({ 'ok' : SerialQueueEntry, 'err' : IDL.Text })],
+        [],
+      ),
     'createVisit' : IDL.Func(
         [
           IDL.Nat,
@@ -1083,8 +1339,18 @@ export const idlFactory = ({ IDL }) => {
         [Visit],
         [],
       ),
+    'deleteAppointment' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
     'deletePatient' : IDL.Func([IDL.Nat], [], []),
     'deletePrescription' : IDL.Func([IDL.Nat], [], []),
+    'deleteQueueEntry' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
     'deleteVisit' : IDL.Func([IDL.Nat], [], []),
     'dischargeBed' : IDL.Func(
         [IDL.Nat],
@@ -1099,6 +1365,11 @@ export const idlFactory = ({ IDL }) => {
     'getAlertsByPatient' : IDL.Func(
         [IDL.Nat],
         [IDL.Vec(ClinicalAlert)],
+        ['query'],
+      ),
+    'getAllAppointmentsByDoctor' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Vec(Appointment), 'err' : IDL.Text })],
         ['query'],
       ),
     'getAllAuditEntries' : IDL.Func(
@@ -1116,6 +1387,21 @@ export const idlFactory = ({ IDL }) => {
     'getAllPatients' : IDL.Func([], [IDL.Vec(Patient)], ['query']),
     'getAllPrescriptions' : IDL.Func([], [IDL.Vec(Prescription)], ['query']),
     'getAllVisits' : IDL.Func([], [IDL.Vec(Visit)], ['query']),
+    'getAppointmentById' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Opt(Appointment), 'err' : IDL.Text })],
+        ['query'],
+      ),
+    'getAppointmentsByDoctor' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Vec(Appointment), 'err' : IDL.Text })],
+        ['query'],
+      ),
+    'getAppointmentsSince' : IDL.Func(
+        [IDL.Text, IDL.Int],
+        [IDL.Variant({ 'ok' : IDL.Vec(Appointment), 'err' : IDL.Text })],
+        ['query'],
+      ),
     'getAuditTrail' : IDL.Func(
         [IDL.Nat, IDL.Nat, IDL.Nat],
         [IDL.Vec(AuditEntry)],
@@ -1174,6 +1460,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(Prescription)],
         ['query'],
       ),
+    'getQueueByDateAndDoctor' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Vec(SerialQueueEntry), 'err' : IDL.Text })],
+        ['query'],
+      ),
+    'getQueueEntriesSince' : IDL.Func(
+        [IDL.Text, IDL.Int],
+        [IDL.Variant({ 'ok' : IDL.Vec(SerialQueueEntry), 'err' : IDL.Text })],
+        ['query'],
+      ),
     'getUnacknowledgedAlerts' : IDL.Func(
         [],
         [IDL.Vec(ClinicalAlert)],
@@ -1206,6 +1502,25 @@ export const idlFactory = ({ IDL }) => {
     'transferBed' : IDL.Func(
         [IDL.Nat, IDL.Nat, IDL.Text],
         [IDL.Variant({ 'ok' : BedRecord, 'err' : IDL.Text })],
+        [],
+      ),
+    'updateAppointment' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Nat),
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          AppointmentType,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          AppointmentStatus,
+          IDL.Opt(IDL.Nat),
+          IDL.Opt(IDL.Text),
+        ],
+        [IDL.Variant({ 'ok' : Appointment, 'err' : IDL.Text })],
         [],
       ),
     'updateClinicalNote' : IDL.Func(
@@ -1277,6 +1592,11 @@ export const idlFactory = ({ IDL }) => {
           IDL.Opt(IDL.Text),
         ],
         [Prescription],
+        [],
+      ),
+    'updateQueueEntry' : IDL.Func(
+        [IDL.Text, QueueStatus, IDL.Opt(IDL.Int)],
+        [IDL.Variant({ 'ok' : SerialQueueEntry, 'err' : IDL.Text })],
         [],
       ),
     'updateVisit' : IDL.Func(

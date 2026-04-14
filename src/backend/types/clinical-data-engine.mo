@@ -234,4 +234,45 @@ module {
     lastEntityId : ?Nat;
   };
 
+  // ─── Appointment ───────────────────────────────────────────────────────────
+
+  public type AppointmentType = { #chamber; #hospital };
+  public type AppointmentStatus = { #pending; #confirmed; #cancelled; #completed };
+
+  public type Appointment = {
+    id : Text;
+    patientId : ?Nat;
+    patientName : Text;
+    registerNumber : ?Text;
+    phone : ?Text;
+    appointmentType : AppointmentType;
+    chamberName : ?Text;
+    hospitalName : ?Text;
+    date : Text;           // YYYY-MM-DD
+    timeSlot : ?Text;
+    status : AppointmentStatus;
+    doctorEmail : Text;
+    serialNumber : ?Nat;
+    notes : ?Text;
+    createdAt : Int;
+    updatedAt : Int;
+  };
+
+  // ─── Serial Queue Entry ────────────────────────────────────────────────────
+
+  public type QueueStatus = { #waiting; #serving; #done; #skipped };
+
+  public type SerialQueueEntry = {
+    id : Text;
+    date : Text;           // YYYY-MM-DD
+    serialNumber : Nat;
+    patientName : Text;
+    registerNumber : ?Text;
+    phone : ?Text;
+    status : QueueStatus;
+    calledAt : ?Int;
+    doctorEmail : Text;
+    createdAt : Int;
+  };
+
 };

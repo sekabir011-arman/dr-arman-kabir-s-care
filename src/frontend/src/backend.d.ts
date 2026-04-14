@@ -7,6 +7,27 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
+export interface UserProfile {
+    name: string;
+}
+export interface Appointment {
+    id: string;
+    status: AppointmentStatus;
+    patientId?: bigint;
+    date: string;
+    createdAt: bigint;
+    chamberName?: string;
+    registerNumber?: string;
+    appointmentType: AppointmentType;
+    updatedAt: bigint;
+    serialNumber?: bigint;
+    notes?: string;
+    patientName: string;
+    hospitalName?: string;
+    phone?: string;
+    doctorEmail: string;
+    timeSlot?: string;
+}
 export type Time = bigint;
 export interface AuditEntry {
     id: bigint;
@@ -179,6 +200,28 @@ export interface BedTransferEntry {
     fromBed: string;
     reason: string;
 }
+export interface SerialQueueEntry {
+    id: string;
+    status: QueueStatus;
+    date: string;
+    createdAt: bigint;
+    registerNumber?: string;
+    calledAt?: bigint;
+    serialNumber: bigint;
+    patientName: string;
+    phone?: string;
+    doctorEmail: string;
+}
+export interface Prescription {
+    id: bigint;
+    patientId: bigint;
+    createdAt: Time;
+    diagnosis?: string;
+    prescriptionDate: Time;
+    medications: Array<Medication>;
+    notes?: string;
+    visitId?: bigint;
+}
 export interface ClinicalAlert {
     id: bigint;
     alertType: AlertType;
@@ -194,25 +237,12 @@ export interface ClinicalAlert {
     severity: AlertSeverity;
     resolvedAt?: bigint;
 }
-export interface Prescription {
-    id: bigint;
-    patientId: bigint;
-    createdAt: Time;
-    diagnosis?: string;
-    prescriptionDate: Time;
-    medications: Array<Medication>;
-    notes?: string;
-    visitId?: bigint;
-}
 export interface Medication {
     duration: string;
     dose: string;
     name: string;
     instructions: string;
     frequency: string;
-}
-export interface UserProfile {
-    name: string;
 }
 export enum AlertSeverity {
     Info = "Info",
@@ -227,6 +257,16 @@ export enum AlertType {
     DrugInteraction = "DrugInteraction",
     Hypoxia = "Hypoxia",
     AllergyContraindication = "AllergyContraindication"
+}
+export enum AppointmentStatus {
+    cancelled = "cancelled",
+    pending = "pending",
+    completed = "completed",
+    confirmed = "confirmed"
+}
+export enum AppointmentType {
+    hospital = "hospital",
+    chamber = "chamber"
 }
 export enum BedStatus {
     Empty = "Empty",
@@ -287,6 +327,12 @@ export enum PatientType {
     admitted = "admitted",
     outdoor = "outdoor"
 }
+export enum QueueStatus {
+    serving = "serving",
+    skipped = "skipped",
+    done = "done",
+    waiting = "waiting"
+}
 export enum StaffRole {
     patient = "patient",
     admin = "admin",
@@ -326,6 +372,34 @@ export interface backendInterface {
     }>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     assignConsultant(patientId: bigint, consultantEmail: string, consultantName: string): Promise<Patient>;
+    bulkUpsertAppointments(appts: Array<Appointment>): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    bulkUpsertQueueEntries(entries: Array<SerialQueueEntry>): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    clearQueueByDate(date: string, doctorEmail: string): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    createAppointment(id: string, patientId: bigint | null, patientName: string, registerNumber: string | null, phone: string | null, appointmentType: AppointmentType, chamberName: string | null, hospitalName: string | null, date: string, timeSlot: string | null, status: AppointmentStatus, doctorEmail: string, serialNumber: bigint | null, notes: string | null): Promise<{
+        __kind__: "ok";
+        ok: Appointment;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     createBedRecord(bedNumber: string, ward: string): Promise<{
         __kind__: "ok";
         ok: BedRecord;
@@ -377,9 +451,30 @@ export interface backendInterface {
     }>;
     createPatient(fullName: string, nameBn: string | null, dateOfBirth: Time | null, gender: Gender, phone: string | null, email: string | null, address: string | null, bloodGroup: string | null, weight: number | null, height: number | null, allergies: Array<string>, chronicConditions: Array<string>, pastSurgicalHistory: string | null, patientType: PatientType, consultantEmail: string | null, consultantName: string | null): Promise<Patient>;
     createPrescription(patientId: bigint, visitId: bigint | null, prescriptionDate: Time, diagnosis: string | null, medications: Array<Medication>, notes: string | null): Promise<Prescription>;
+    createQueueEntry(id: string, date: string, serialNumber: bigint, patientName: string, registerNumber: string | null, phone: string | null, status: QueueStatus, calledAt: bigint | null, doctorEmail: string): Promise<{
+        __kind__: "ok";
+        ok: SerialQueueEntry;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     createVisit(patientId: bigint, visitDate: Time, chiefComplaint: string, historyOfPresentIllness: string | null, vitalSigns: VitalSigns, physicalExamination: string | null, diagnosis: string | null, notes: string | null, visitType: VisitType): Promise<Visit>;
+    deleteAppointment(id: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     deletePatient(id: bigint): Promise<void>;
     deletePrescription(id: bigint): Promise<void>;
+    deleteQueueEntry(id: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     deleteVisit(id: bigint): Promise<void>;
     dischargeBed(bedId: bigint): Promise<{
         __kind__: "ok";
@@ -390,6 +485,13 @@ export interface backendInterface {
     }>;
     getActiveOrdersByPatient(patientId: bigint): Promise<Array<ClinicalOrder>>;
     getAlertsByPatient(patientId: bigint): Promise<Array<ClinicalAlert>>;
+    getAllAppointmentsByDoctor(doctorEmail: string): Promise<{
+        __kind__: "ok";
+        ok: Array<Appointment>;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     getAllAuditEntries(limit: bigint, offset: bigint): Promise<Array<AuditEntry>>;
     getAllBeds(): Promise<Array<BedRecord>>;
     getAllDiagnosisTemplates(): Promise<Array<DiagnosisTemplate>>;
@@ -397,6 +499,27 @@ export interface backendInterface {
     getAllPatients(): Promise<Array<Patient>>;
     getAllPrescriptions(): Promise<Array<Prescription>>;
     getAllVisits(): Promise<Array<Visit>>;
+    getAppointmentById(id: string): Promise<{
+        __kind__: "ok";
+        ok: Appointment | null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    getAppointmentsByDoctor(doctorEmail: string, date: string): Promise<{
+        __kind__: "ok";
+        ok: Array<Appointment>;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    getAppointmentsSince(doctorEmail: string, sinceTimestamp: bigint): Promise<{
+        __kind__: "ok";
+        ok: Array<Appointment>;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     getAuditTrail(patientId: bigint, limit: bigint, offset: bigint): Promise<Array<AuditEntry>>;
     getAvailableBeds(): Promise<Array<BedRecord>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
@@ -415,6 +538,20 @@ export interface backendInterface {
     getPrescription(id: bigint): Promise<Prescription | null>;
     getPrescriptionsByPatientId(patientId: bigint): Promise<Array<Prescription>>;
     getPrescriptionsByVisitId(visitId: bigint): Promise<Array<Prescription>>;
+    getQueueByDateAndDoctor(date: string, doctorEmail: string): Promise<{
+        __kind__: "ok";
+        ok: Array<SerialQueueEntry>;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    getQueueEntriesSince(doctorEmail: string, sinceTimestamp: bigint): Promise<{
+        __kind__: "ok";
+        ok: Array<SerialQueueEntry>;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     getUnacknowledgedAlerts(): Promise<Array<ClinicalAlert>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getVisit(id: bigint): Promise<Visit | null>;
@@ -449,6 +586,13 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
+    updateAppointment(id: string, patientId: bigint | null, patientName: string, registerNumber: string | null, phone: string | null, appointmentType: AppointmentType, chamberName: string | null, hospitalName: string | null, date: string, timeSlot: string | null, status: AppointmentStatus, serialNumber: bigint | null, notes: string | null): Promise<{
+        __kind__: "ok";
+        ok: Appointment;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     updateClinicalNote(id: bigint, content: string, isDraft: boolean, changeReason: string | null): Promise<{
         __kind__: "ok";
         ok: ClinicalNote;
@@ -479,5 +623,12 @@ export interface backendInterface {
     }>;
     updatePatient(id: bigint, fullName: string, nameBn: string | null, dateOfBirth: Time | null, gender: Gender, phone: string | null, email: string | null, address: string | null, bloodGroup: string | null, weight: number | null, height: number | null, allergies: Array<string>, chronicConditions: Array<string>, pastSurgicalHistory: string | null, patientType: PatientType, consultantEmail: string | null, consultantName: string | null): Promise<Patient>;
     updatePrescription(id: bigint, patientId: bigint, visitId: bigint | null, prescriptionDate: Time, diagnosis: string | null, medications: Array<Medication>, notes: string | null): Promise<Prescription>;
+    updateQueueEntry(id: string, status: QueueStatus, calledAt: bigint | null): Promise<{
+        __kind__: "ok";
+        ok: SerialQueueEntry;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     updateVisit(id: bigint, patientId: bigint, visitDate: Time, chiefComplaint: string, historyOfPresentIllness: string | null, vitalSigns: VitalSigns, physicalExamination: string | null, diagnosis: string | null, notes: string | null, visitType: VisitType): Promise<Visit>;
 }

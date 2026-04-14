@@ -22,6 +22,8 @@ module {
     beds : Map.Map<Nat, Types.BedRecord>;
     diagnosisTemplates : Map.Map<Nat, Types.DiagnosisTemplate>;
     syncRecords : Map.Map<Text, Types.SyncRecord>;
+    appointments : Map.Map<Text, Types.Appointment>;
+    queueEntries : Map.Map<Text, Types.SerialQueueEntry>;
     var encounterIdCounter : Nat;
     var observationIdCounter : Nat;
     var orderIdCounter : Nat;
@@ -44,6 +46,8 @@ module {
       beds = Map.empty<Nat, Types.BedRecord>();
       diagnosisTemplates = Map.empty<Nat, Types.DiagnosisTemplate>();
       syncRecords = Map.empty<Text, Types.SyncRecord>();
+      appointments = Map.empty<Text, Types.Appointment>();
+      queueEntries = Map.empty<Text, Types.SerialQueueEntry>();
       var encounterIdCounter = 1;
       var observationIdCounter = 1;
       var orderIdCounter = 1;
@@ -1056,6 +1060,344 @@ module {
       # "\"appointmentsJsonLen\":" # appointmentsJson.size().toText() # ","
       # "\"note\":\"Use createPatient/createVisit/createPrescription per entity for full migration\"}";
     summary;
+  };
+
+  // ─── Appointment Logic ─────────────────────────────────────────────────────
+
+  public func createAppointment(
+    state : EngineState,
+    _caller : Principal,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    id : Text,
+    patientId : ?Nat,
+    patientName : Text,
+    registerNumber : ?Text,
+    phone : ?Text,
+    appointmentType : Types.AppointmentType,
+    chamberName : ?Text,
+    hospitalName : ?Text,
+    date : Text,
+    timeSlot : ?Text,
+    status : Types.AppointmentStatus,
+    doctorEmail : Text,
+    serialNumber : ?Nat,
+    notes : ?Text,
+  ) : { #ok : Types.Appointment; #err : Text } {
+    // Only admin or the owning doctor can create appointments
+    if (callerRole != #admin and callerEmail != doctorEmail) {
+      return #err("Unauthorized: can only create appointments for your own account");
+    };
+    let now = Time.now();
+    let appt : Types.Appointment = {
+      id;
+      patientId;
+      patientName;
+      registerNumber;
+      phone;
+      appointmentType;
+      chamberName;
+      hospitalName;
+      date;
+      timeSlot;
+      status;
+      doctorEmail;
+      serialNumber;
+      notes;
+      createdAt = now;
+      updatedAt = now;
+    };
+    state.appointments.add(id, appt);
+    #ok(appt);
+  };
+
+  public func updateAppointment(
+    state : EngineState,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    id : Text,
+    patientId : ?Nat,
+    patientName : Text,
+    registerNumber : ?Text,
+    phone : ?Text,
+    appointmentType : Types.AppointmentType,
+    chamberName : ?Text,
+    hospitalName : ?Text,
+    date : Text,
+    timeSlot : ?Text,
+    status : Types.AppointmentStatus,
+    serialNumber : ?Nat,
+    notes : ?Text,
+  ) : { #ok : Types.Appointment; #err : Text } {
+    let existing = switch (state.appointments.get(id)) {
+      case (null) { return #err("Appointment not found") };
+      case (?a) { a };
+    };
+    if (callerRole != #admin and callerEmail != existing.doctorEmail) {
+      return #err("Unauthorized: can only update your own appointments");
+    };
+    let updated : Types.Appointment = {
+      existing with
+      patientId;
+      patientName;
+      registerNumber;
+      phone;
+      appointmentType;
+      chamberName;
+      hospitalName;
+      date;
+      timeSlot;
+      status;
+      serialNumber;
+      notes;
+      updatedAt = Time.now();
+    };
+    state.appointments.add(id, updated);
+    #ok(updated);
+  };
+
+  public func deleteAppointment(
+    state : EngineState,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    id : Text,
+  ) : { #ok : (); #err : Text } {
+    switch (state.appointments.get(id)) {
+      case (null) { return #err("Appointment not found") };
+      case (?a) {
+        if (callerRole != #admin and callerEmail != a.doctorEmail) {
+          return #err("Unauthorized: can only delete your own appointments");
+        };
+      };
+    };
+    state.appointments.remove(id);
+    #ok(());
+  };
+
+  public func getAppointmentById(
+    state : EngineState,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    id : Text,
+  ) : { #ok : ?Types.Appointment; #err : Text } {
+    switch (state.appointments.get(id)) {
+      case (null) { #ok(null) };
+      case (?a) {
+        if (callerRole != #admin and callerEmail != a.doctorEmail) {
+          return #err("Unauthorized: can only view your own appointments");
+        };
+        #ok(?a);
+      };
+    };
+  };
+
+  public func getAppointmentsByDoctor(
+    state : EngineState,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    doctorEmail : Text,
+    date : Text,
+  ) : { #ok : [Types.Appointment]; #err : Text } {
+    if (callerRole != #admin and callerEmail != doctorEmail) {
+      return #err("Unauthorized: can only view your own appointments");
+    };
+    let results = state.appointments.values().filter(func (a) {
+      a.doctorEmail == doctorEmail and a.date == date
+    }).toArray();
+    #ok(results);
+  };
+
+  public func getAllAppointmentsByDoctor(
+    state : EngineState,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    doctorEmail : Text,
+  ) : { #ok : [Types.Appointment]; #err : Text } {
+    if (callerRole != #admin and callerEmail != doctorEmail) {
+      return #err("Unauthorized: can only view your own appointments");
+    };
+    let results = state.appointments.values().filter(func (a) {
+      a.doctorEmail == doctorEmail
+    }).toArray();
+    #ok(results);
+  };
+
+  public func getAppointmentsSince(
+    state : EngineState,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    doctorEmail : Text,
+    sinceTimestamp : Int,
+  ) : { #ok : [Types.Appointment]; #err : Text } {
+    if (callerRole != #admin and callerEmail != doctorEmail) {
+      return #err("Unauthorized: can only sync your own appointments");
+    };
+    let results = state.appointments.values().filter(func (a) {
+      a.doctorEmail == doctorEmail and a.updatedAt >= sinceTimestamp
+    }).toArray();
+    #ok(results);
+  };
+
+  public func bulkUpsertAppointments(
+    state : EngineState,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    appts : [Types.Appointment],
+  ) : { #ok : Nat; #err : Text } {
+    var count = 0;
+    for (a in appts.values()) {
+      if (callerRole != #admin and callerEmail != a.doctorEmail) {
+        return #err("Unauthorized: can only upsert your own appointments");
+      };
+      state.appointments.add(a.id, a);
+      count += 1;
+    };
+    #ok(count);
+  };
+
+  // ─── Serial Queue Logic ────────────────────────────────────────────────────
+
+  public func createQueueEntry(
+    state : EngineState,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    id : Text,
+    date : Text,
+    serialNumber : Nat,
+    patientName : Text,
+    registerNumber : ?Text,
+    phone : ?Text,
+    status : Types.QueueStatus,
+    calledAt : ?Int,
+    doctorEmail : Text,
+  ) : { #ok : Types.SerialQueueEntry; #err : Text } {
+    if (callerRole != #admin and callerEmail != doctorEmail) {
+      return #err("Unauthorized: can only create queue entries for your own account");
+    };
+    let entry : Types.SerialQueueEntry = {
+      id;
+      date;
+      serialNumber;
+      patientName;
+      registerNumber;
+      phone;
+      status;
+      calledAt;
+      doctorEmail;
+      createdAt = Time.now();
+    };
+    state.queueEntries.add(id, entry);
+    #ok(entry);
+  };
+
+  public func updateQueueEntry(
+    state : EngineState,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    id : Text,
+    status : Types.QueueStatus,
+    calledAt : ?Int,
+  ) : { #ok : Types.SerialQueueEntry; #err : Text } {
+    let existing = switch (state.queueEntries.get(id)) {
+      case (null) { return #err("Queue entry not found") };
+      case (?e) { e };
+    };
+    if (callerRole != #admin and callerEmail != existing.doctorEmail) {
+      return #err("Unauthorized: can only update your own queue entries");
+    };
+    let updated : Types.SerialQueueEntry = {
+      existing with
+      status;
+      calledAt;
+    };
+    state.queueEntries.add(id, updated);
+    #ok(updated);
+  };
+
+  public func deleteQueueEntry(
+    state : EngineState,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    id : Text,
+  ) : { #ok : (); #err : Text } {
+    switch (state.queueEntries.get(id)) {
+      case (null) { return #err("Queue entry not found") };
+      case (?e) {
+        if (callerRole != #admin and callerEmail != e.doctorEmail) {
+          return #err("Unauthorized: can only delete your own queue entries");
+        };
+      };
+    };
+    state.queueEntries.remove(id);
+    #ok(());
+  };
+
+  public func getQueueByDateAndDoctor(
+    state : EngineState,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    date : Text,
+    doctorEmail : Text,
+  ) : { #ok : [Types.SerialQueueEntry]; #err : Text } {
+    if (callerRole != #admin and callerEmail != doctorEmail) {
+      return #err("Unauthorized: can only view your own queue");
+    };
+    let results = state.queueEntries.values().filter(func (e) {
+      e.date == date and e.doctorEmail == doctorEmail
+    }).toArray();
+    #ok(results);
+  };
+
+  public func clearQueueByDate(
+    state : EngineState,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    date : Text,
+    doctorEmail : Text,
+  ) : { #ok : Nat; #err : Text } {
+    if (callerRole != #admin and callerEmail != doctorEmail) {
+      return #err("Unauthorized: can only clear your own queue");
+    };
+    let toRemove = state.queueEntries.values().filter(func (e) {
+      e.date == date and e.doctorEmail == doctorEmail
+    }).toArray();
+    for (e in toRemove.values()) {
+      state.queueEntries.remove(e.id);
+    };
+    #ok(toRemove.size());
+  };
+
+  public func getQueueEntriesSince(
+    state : EngineState,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    doctorEmail : Text,
+    sinceTimestamp : Int,
+  ) : { #ok : [Types.SerialQueueEntry]; #err : Text } {
+    if (callerRole != #admin and callerEmail != doctorEmail) {
+      return #err("Unauthorized: can only sync your own queue entries");
+    };
+    let results = state.queueEntries.values().filter(func (e) {
+      e.doctorEmail == doctorEmail and e.createdAt >= sinceTimestamp
+    }).toArray();
+    #ok(results);
+  };
+
+  public func bulkUpsertQueueEntries(
+    state : EngineState,
+    callerRole : Types.StaffRole,
+    callerEmail : Text,
+    entries : [Types.SerialQueueEntry],
+  ) : { #ok : Nat; #err : Text } {
+    var count = 0;
+    for (e in entries.values()) {
+      if (callerRole != #admin and callerEmail != e.doctorEmail) {
+        return #err("Unauthorized: can only upsert your own queue entries");
+      };
+      state.queueEntries.add(e.id, e);
+      count += 1;
+    };
+    #ok(count);
   };
 
 };

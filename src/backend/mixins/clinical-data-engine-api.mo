@@ -444,4 +444,167 @@ mixin (
     #ok(summary);
   };
 
+  // ─── Appointment API ───────────────────────────────────────────────────────
+
+  public shared ({ caller }) func createAppointment(
+    id : Text,
+    patientId : ?Nat,
+    patientName : Text,
+    registerNumber : ?Text,
+    phone : ?Text,
+    appointmentType : Types.AppointmentType,
+    chamberName : ?Text,
+    hospitalName : ?Text,
+    date : Text,
+    timeSlot : ?Text,
+    status : Types.AppointmentStatus,
+    doctorEmail : Text,
+    serialNumber : ?Nat,
+    notes : ?Text,
+  ) : async { #ok : Types.Appointment; #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.createAppointment(
+      engineState, caller, role, caller.toText(),
+      id, patientId, patientName, registerNumber, phone,
+      appointmentType, chamberName, hospitalName, date, timeSlot,
+      status, doctorEmail, serialNumber, notes,
+    );
+  };
+
+  public shared ({ caller }) func updateAppointment(
+    id : Text,
+    patientId : ?Nat,
+    patientName : Text,
+    registerNumber : ?Text,
+    phone : ?Text,
+    appointmentType : Types.AppointmentType,
+    chamberName : ?Text,
+    hospitalName : ?Text,
+    date : Text,
+    timeSlot : ?Text,
+    status : Types.AppointmentStatus,
+    serialNumber : ?Nat,
+    notes : ?Text,
+  ) : async { #ok : Types.Appointment; #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.updateAppointment(
+      engineState, role, caller.toText(),
+      id, patientId, patientName, registerNumber, phone,
+      appointmentType, chamberName, hospitalName, date, timeSlot,
+      status, serialNumber, notes,
+    );
+  };
+
+  public shared ({ caller }) func deleteAppointment(
+    id : Text
+  ) : async { #ok : (); #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.deleteAppointment(engineState, role, caller.toText(), id);
+  };
+
+  public query ({ caller }) func getAppointmentById(
+    id : Text
+  ) : async { #ok : ?Types.Appointment; #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.getAppointmentById(engineState, role, caller.toText(), id);
+  };
+
+  public query ({ caller }) func getAppointmentsByDoctor(
+    doctorEmail : Text,
+    date : Text,
+  ) : async { #ok : [Types.Appointment]; #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.getAppointmentsByDoctor(engineState, role, caller.toText(), doctorEmail, date);
+  };
+
+  public query ({ caller }) func getAllAppointmentsByDoctor(
+    doctorEmail : Text
+  ) : async { #ok : [Types.Appointment]; #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.getAllAppointmentsByDoctor(engineState, role, caller.toText(), doctorEmail);
+  };
+
+  public query ({ caller }) func getAppointmentsSince(
+    doctorEmail : Text,
+    sinceTimestamp : Int,
+  ) : async { #ok : [Types.Appointment]; #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.getAppointmentsSince(engineState, role, caller.toText(), doctorEmail, sinceTimestamp);
+  };
+
+  public shared ({ caller }) func bulkUpsertAppointments(
+    appts : [Types.Appointment]
+  ) : async { #ok : Nat; #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.bulkUpsertAppointments(engineState, role, caller.toText(), appts);
+  };
+
+  // ─── Serial Queue API ──────────────────────────────────────────────────────
+
+  public shared ({ caller }) func createQueueEntry(
+    id : Text,
+    date : Text,
+    serialNumber : Nat,
+    patientName : Text,
+    registerNumber : ?Text,
+    phone : ?Text,
+    status : Types.QueueStatus,
+    calledAt : ?Int,
+    doctorEmail : Text,
+  ) : async { #ok : Types.SerialQueueEntry; #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.createQueueEntry(
+      engineState, role, caller.toText(),
+      id, date, serialNumber, patientName, registerNumber, phone,
+      status, calledAt, doctorEmail,
+    );
+  };
+
+  public shared ({ caller }) func updateQueueEntry(
+    id : Text,
+    status : Types.QueueStatus,
+    calledAt : ?Int,
+  ) : async { #ok : Types.SerialQueueEntry; #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.updateQueueEntry(engineState, role, caller.toText(), id, status, calledAt);
+  };
+
+  public shared ({ caller }) func deleteQueueEntry(
+    id : Text
+  ) : async { #ok : (); #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.deleteQueueEntry(engineState, role, caller.toText(), id);
+  };
+
+  public query ({ caller }) func getQueueByDateAndDoctor(
+    date : Text,
+    doctorEmail : Text,
+  ) : async { #ok : [Types.SerialQueueEntry]; #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.getQueueByDateAndDoctor(engineState, role, caller.toText(), date, doctorEmail);
+  };
+
+  public shared ({ caller }) func clearQueueByDate(
+    date : Text,
+    doctorEmail : Text,
+  ) : async { #ok : Nat; #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.clearQueueByDate(engineState, role, caller.toText(), date, doctorEmail);
+  };
+
+  public query ({ caller }) func getQueueEntriesSince(
+    doctorEmail : Text,
+    sinceTimestamp : Int,
+  ) : async { #ok : [Types.SerialQueueEntry]; #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.getQueueEntriesSince(engineState, role, caller.toText(), doctorEmail, sinceTimestamp);
+  };
+
+  public shared ({ caller }) func bulkUpsertQueueEntries(
+    entries : [Types.SerialQueueEntry]
+  ) : async { #ok : Nat; #err : Text } {
+    let role = getCallerRole(caller);
+    Lib.bulkUpsertQueueEntries(engineState, role, caller.toText(), entries);
+  };
+
 };

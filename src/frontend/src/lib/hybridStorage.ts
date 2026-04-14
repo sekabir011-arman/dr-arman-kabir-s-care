@@ -417,6 +417,23 @@ async function dispatchSyncItem(
       }
       break;
     }
+    case "appointment": {
+      // Use bulk upsert for both create and update — it is idempotent
+      if (item.operation === "delete" && item.entityId) {
+        await actor.deleteAppointment(item.entityId);
+      } else {
+        await actor.bulkUpsertAppointments([d]);
+      }
+      break;
+    }
+    case "queueEntry": {
+      if (item.operation === "delete" && item.entityId) {
+        await actor.deleteQueueEntry(item.entityId);
+      } else {
+        await actor.bulkUpsertQueueEntries([d]);
+      }
+      break;
+    }
     default:
       break;
   }
@@ -428,8 +445,8 @@ async function dispatchSyncItem(
 // so both devices always see the same source of truth.
 
 /**
- * Pull all patients, visits, and prescriptions from the canister and
- * write them into localStorage as the offline cache.
+ * Pull all patients, visits, prescriptions, appointments, and queue entries
+ * from the canister and write them into localStorage as the offline cache.
  * This runs every 15s and on every network reconnect.
  *
  * Returns true if any data was updated (useful for triggering cache invalidation).
@@ -492,6 +509,58 @@ export async function pollAndUpdateFromCanister(
       if (JSON.stringify(merged) !== JSON.stringify(local)) {
         saveToStorage(key, merged);
         updated = true;
+      }
+    }
+  } catch {}
+
+  try {
+    // ── Pull appointments ────────────────────────────────────────────────────
+    // Use a timestamp 30 days back so we always get a useful window of data.
+    // The canister returns all appointments updated since that timestamp.
+    const sinceMs = BigInt(Date.now() - 30 * 24 * 60 * 60 * 1000) * 1_000_000n;
+    const remoteAppointments = await actor.getAppointmentsSince(sinceMs);
+    if (Array.isArray(remoteAppointments) && remoteAppointments.length > 0) {
+      const local = loadFromStorage<{ id: unknown }>("clinic_appointments");
+      const merged = mergeByIdPreferRemote(local, remoteAppointments);
+      if (JSON.stringify(merged) !== JSON.stringify(local)) {
+        localStorage.setItem("clinic_appointments", JSON.stringify(merged));
+        updated = true;
+      }
+    }
+  } catch {}
+
+  try {
+    // ── Pull today's serial queue entries ────────────────────────────────────
+    const todayDate = new Date().toISOString().slice(0, 10);
+    const sinceMs = BigInt(Date.now() - 2 * 24 * 60 * 60 * 1000) * 1_000_000n;
+    const remoteQueue = await actor.getQueueEntriesSince(sinceMs);
+    if (Array.isArray(remoteQueue) && remoteQueue.length > 0) {
+      // Group by date and merge each date key separately
+      const byDate = new Map<string, unknown[]>();
+      for (const entry of remoteQueue) {
+        const d = (entry as Record<string, string>).queueDate ?? todayDate;
+        if (!byDate.has(d)) byDate.set(d, []);
+        byDate.get(d)!.push(entry);
+      }
+      for (const [date, entries] of byDate) {
+        const localKey = `clinic_serials_${date}`;
+        const local = (() => {
+          try {
+            return JSON.parse(localStorage.getItem(localKey) || "[]") as {
+              id: unknown;
+            }[];
+          } catch {
+            return [];
+          }
+        })();
+        const merged = mergeByIdPreferRemote(
+          local,
+          entries as { id: unknown }[],
+        );
+        if (JSON.stringify(merged) !== JSON.stringify(local)) {
+          localStorage.setItem(localKey, JSON.stringify(merged));
+          if (date === todayDate) updated = true;
+        }
       }
     }
   } catch {}

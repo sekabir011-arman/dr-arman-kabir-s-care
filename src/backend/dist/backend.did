@@ -63,6 +63,26 @@ type StaffRole =
    patient;
    staff;
  };
+type SerialQueueEntry = 
+ record {
+   calledAt: opt int;
+   createdAt: int;
+   date: text;
+   doctorEmail: text;
+   id: text;
+   patientName: text;
+   phone: opt text;
+   registerNumber: opt text;
+   serialNumber: nat;
+   status: QueueStatus;
+ };
+type QueueStatus = 
+ variant {
+   done;
+   serving;
+   skipped;
+   waiting;
+ };
 type Prescription = 
  record {
    createdAt: Time;
@@ -311,6 +331,37 @@ type AuditEntry =
    ipAddress: opt text;
    reason: opt text;
  };
+type AppointmentType = 
+ variant {
+   chamber;
+   hospital;
+ };
+type AppointmentStatus = 
+ variant {
+   cancelled;
+   completed;
+   confirmed;
+   pending;
+ };
+type Appointment = 
+ record {
+   appointmentType: AppointmentType;
+   chamberName: opt text;
+   createdAt: int;
+   date: text;
+   doctorEmail: text;
+   hospitalName: opt text;
+   id: text;
+   notes: opt text;
+   patientId: opt nat;
+   patientName: text;
+   phone: opt text;
+   registerNumber: opt text;
+   serialNumber: opt nat;
+   status: AppointmentStatus;
+   timeSlot: opt text;
+   updatedAt: int;
+ };
 type AlertType = 
  variant {
    AKI;
@@ -346,6 +397,30 @@ service : {
   assignCallerUserRole: (user: principal, role: UserRole) -> ();
   assignConsultant: (patientId: nat, consultantEmail: text, consultantName:
    text) -> (Patient);
+  bulkUpsertAppointments: (appts: vec Appointment) ->
+   (variant {
+      err: text;
+      ok: nat;
+    });
+  bulkUpsertQueueEntries: (entries: vec SerialQueueEntry) ->
+   (variant {
+      err: text;
+      ok: nat;
+    });
+  clearQueueByDate: (date: text, doctorEmail: text) ->
+   (variant {
+      err: text;
+      ok: nat;
+    });
+  createAppointment: (id: text, patientId: opt nat, patientName: text,
+   registerNumber: opt text, phone: opt text, appointmentType:
+   AppointmentType, chamberName: opt text, hospitalName: opt text, date:
+   text, timeSlot: opt text, status: AppointmentStatus, doctorEmail: 
+   text, serialNumber: opt nat, notes: opt text) ->
+   (variant {
+      err: text;
+      ok: Appointment;
+    });
   createBedRecord: (bedNumber: text, ward: text) ->
    (variant {
       err: text;
@@ -397,12 +472,27 @@ service : {
   createPrescription: (patientId: nat, visitId: opt nat, prescriptionDate:
    Time, diagnosis: opt text, medications: vec Medication, notes:
    opt text) -> (Prescription);
+  createQueueEntry: (id: text, date: text, serialNumber: nat, patientName:
+   text, registerNumber: opt text, phone: opt text, status: QueueStatus,
+   calledAt: opt int, doctorEmail: text) ->
+   (variant {
+      err: text;
+      ok: SerialQueueEntry;
+    });
   createVisit: (patientId: nat, visitDate: Time, chiefComplaint: text,
    historyOfPresentIllness: opt text, vitalSigns: VitalSigns,
    physicalExamination: opt text, diagnosis: opt text, notes: opt text,
    visitType: VisitType) -> (Visit);
+  deleteAppointment: (id: text) -> (variant {
+                                      err: text;
+                                      ok;
+                                    });
   deletePatient: (id: nat) -> ();
   deletePrescription: (id: nat) -> ();
+  deleteQueueEntry: (id: text) -> (variant {
+                                     err: text;
+                                     ok;
+                                   });
   deleteVisit: (id: nat) -> ();
   dischargeBed: (bedId: nat) -> (variant {
                                    err: text;
@@ -410,6 +500,11 @@ service : {
                                  });
   getActiveOrdersByPatient: (patientId: nat) -> (vec ClinicalOrder) query;
   getAlertsByPatient: (patientId: nat) -> (vec ClinicalAlert) query;
+  getAllAppointmentsByDoctor: (doctorEmail: text) ->
+   (variant {
+      err: text;
+      ok: vec Appointment;
+    }) query;
   getAllAuditEntries: (limit: nat, offset: nat) -> (vec AuditEntry) query;
   getAllBeds: () -> (vec BedRecord) query;
   getAllDiagnosisTemplates: () -> (vec DiagnosisTemplate) query;
@@ -417,6 +512,21 @@ service : {
   getAllPatients: () -> (vec Patient) query;
   getAllPrescriptions: () -> (vec Prescription) query;
   getAllVisits: () -> (vec Visit) query;
+  getAppointmentById: (id: text) ->
+   (variant {
+      err: text;
+      ok: opt Appointment;
+    }) query;
+  getAppointmentsByDoctor: (doctorEmail: text, date: text) ->
+   (variant {
+      err: text;
+      ok: vec Appointment;
+    }) query;
+  getAppointmentsSince: (doctorEmail: text, sinceTimestamp: int) ->
+   (variant {
+      err: text;
+      ok: vec Appointment;
+    }) query;
   getAuditTrail: (patientId: nat, limit: nat, offset: nat) ->
    (vec AuditEntry) query;
   getAvailableBeds: () -> (vec BedRecord) query;
@@ -438,6 +548,16 @@ service : {
   getPrescription: (id: nat) -> (opt Prescription) query;
   getPrescriptionsByPatientId: (patientId: nat) -> (vec Prescription) query;
   getPrescriptionsByVisitId: (visitId: nat) -> (vec Prescription) query;
+  getQueueByDateAndDoctor: (date: text, doctorEmail: text) ->
+   (variant {
+      err: text;
+      ok: vec SerialQueueEntry;
+    }) query;
+  getQueueEntriesSince: (doctorEmail: text, sinceTimestamp: int) ->
+   (variant {
+      err: text;
+      ok: vec SerialQueueEntry;
+    }) query;
   getUnacknowledgedAlerts: () -> (vec ClinicalAlert) query;
   getUserProfile: (user: principal) -> (opt UserProfile) query;
   getVisit: (id: nat) -> (opt Visit) query;
@@ -464,6 +584,14 @@ service : {
       err: text;
       ok: BedRecord;
     });
+  updateAppointment: (id: text, patientId: opt nat, patientName: text,
+   registerNumber: opt text, phone: opt text, appointmentType:
+   AppointmentType, chamberName: opt text, hospitalName: opt text, date:
+   text, timeSlot: opt text, status: AppointmentStatus, serialNumber:
+   opt nat, notes: opt text) -> (variant {
+                                   err: text;
+                                   ok: Appointment;
+                                 });
   updateClinicalNote: (id: nat, content: text, isDraft: bool, changeReason:
    opt text) -> (variant {
                    err: text;
@@ -496,6 +624,11 @@ service : {
   updatePrescription: (id: nat, patientId: nat, visitId: opt nat,
    prescriptionDate: Time, diagnosis: opt text, medications: vec Medication,
    notes: opt text) -> (Prescription);
+  updateQueueEntry: (id: text, status: QueueStatus, calledAt: opt int) ->
+   (variant {
+      err: text;
+      ok: SerialQueueEntry;
+    });
   updateVisit: (id: nat, patientId: nat, visitDate: Time, chiefComplaint:
    text, historyOfPresentIllness: opt text, vitalSigns: VitalSigns,
    physicalExamination: opt text, diagnosis: opt text, notes: opt text,

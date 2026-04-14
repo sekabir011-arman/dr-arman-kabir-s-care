@@ -37,6 +37,15 @@ export function setCanisterActor(actor: any): void {
   _canisterActor = actor;
 }
 
+/** Get the current canister actor — used by non-hook code that needs direct access */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getCanisterActor(): any | null {
+  return _canisterActor;
+}
+
+/** Exported ref getter for modules that import dynamically */
+export const _canisterActorRef = () => _canisterActor;
+
 function canUseCanister(): boolean {
   return _canisterActor !== null && navigator.onLine;
 }
@@ -1939,6 +1948,132 @@ export function setPrescriptionHeaderImage(
   const email = doctorEmail ?? getDoctorEmail();
   const key = `prescriptionHeaders_${type}_${email}`;
   localStorage.setItem(key, imageDataUrl);
+}
+
+// ── Appointment & Serial Queue Types ─────────────────────────────────────────
+
+export interface Appointment {
+  id: string;
+  patientName: string;
+  phone: string;
+  date: string;
+  time: string;
+  reason: string;
+  status: "scheduled" | "confirmed" | "cancelled";
+  doctor?: string;
+  chamber?: string;
+  registerNumber?: string;
+  appointmentType: "chamber" | "admitted";
+  hospitalName?: string;
+  bedWardNumber?: string;
+  admissionReason?: string;
+  referringDoctor?: string;
+  serialNumber?: number;
+  serialDate?: string;
+  visitTime?: string;
+  updatedAt?: string;
+}
+
+export interface SerialQueueEntry {
+  id: string;
+  serial: number;
+  patientName: string;
+  phone: string;
+  arrivalTime: string;
+  status: "waiting" | "in-progress" | "done";
+  queueDate: string;
+  updatedAt?: string;
+}
+
+// ── Appointment Queries ───────────────────────────────────────────────────────
+
+export function useGetAppointmentsQuery() {
+  return useQuery<Appointment[]>({
+    queryKey: ["appointments"],
+    queryFn: async () => {
+      if (canUseCanister()) {
+        try {
+          const sinceMs =
+            BigInt(Date.now() - 30 * 24 * 60 * 60 * 1000) * 1_000_000n;
+          const remote = (await _canisterActor.getAppointmentsSince(
+            sinceMs,
+          )) as Appointment[];
+          if (Array.isArray(remote) && remote.length > 0) {
+            const local = (() => {
+              try {
+                return JSON.parse(
+                  localStorage.getItem("clinic_appointments") || "[]",
+                ) as Appointment[];
+              } catch {
+                return [] as Appointment[];
+              }
+            })();
+            const merged = mergeArraysById(local, remote);
+            localStorage.setItem("clinic_appointments", JSON.stringify(merged));
+            return merged;
+          }
+        } catch {
+          // Fall through to localStorage
+        }
+      }
+      try {
+        return JSON.parse(
+          localStorage.getItem("clinic_appointments") || "[]",
+        ) as Appointment[];
+      } catch {
+        return [];
+      }
+    },
+    refetchInterval: 15_000,
+  });
+}
+
+export function useGetQueueQuery(date?: string) {
+  const queueDate = date ?? new Date().toISOString().slice(0, 10);
+  return useQuery<SerialQueueEntry[]>({
+    queryKey: ["serialQueue", queueDate],
+    queryFn: async () => {
+      if (canUseCanister()) {
+        try {
+          const sinceMs =
+            BigInt(Date.now() - 2 * 24 * 60 * 60 * 1000) * 1_000_000n;
+          const remote = (await _canisterActor.getQueueEntriesSince(
+            sinceMs,
+          )) as SerialQueueEntry[];
+          if (Array.isArray(remote)) {
+            const todayEntries = remote.filter(
+              (e) => (e.queueDate ?? queueDate) === queueDate,
+            );
+            if (todayEntries.length > 0) {
+              const localKey = `clinic_serials_${queueDate}`;
+              const local = (() => {
+                try {
+                  return JSON.parse(
+                    localStorage.getItem(localKey) || "[]",
+                  ) as SerialQueueEntry[];
+                } catch {
+                  return [] as SerialQueueEntry[];
+                }
+              })();
+              const merged = mergeArraysById(local, todayEntries);
+              localStorage.setItem(localKey, JSON.stringify(merged));
+              return merged;
+            }
+          }
+        } catch {
+          // Fall through to localStorage
+        }
+      }
+      try {
+        return JSON.parse(
+          localStorage.getItem(`clinic_serials_${queueDate}`) || "[]",
+        ) as SerialQueueEntry[];
+      } catch {
+        return [];
+      }
+    },
+    refetchInterval: 15_000,
+  });
 }
 
 // ── Consultant Reassignment ───────────────────────────────────────────────────

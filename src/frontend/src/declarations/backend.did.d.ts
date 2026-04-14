@@ -20,6 +20,30 @@ export type AlertType = { 'AKI' : null } |
   { 'DrugInteraction' : null } |
   { 'Hypoxia' : null } |
   { 'AllergyContraindication' : null };
+export interface Appointment {
+  'id' : string,
+  'status' : AppointmentStatus,
+  'patientId' : [] | [bigint],
+  'date' : string,
+  'createdAt' : bigint,
+  'chamberName' : [] | [string],
+  'registerNumber' : [] | [string],
+  'appointmentType' : AppointmentType,
+  'updatedAt' : bigint,
+  'serialNumber' : [] | [bigint],
+  'notes' : [] | [string],
+  'patientName' : string,
+  'hospitalName' : [] | [string],
+  'phone' : [] | [string],
+  'doctorEmail' : string,
+  'timeSlot' : [] | [string],
+}
+export type AppointmentStatus = { 'cancelled' : null } |
+  { 'pending' : null } |
+  { 'completed' : null } |
+  { 'confirmed' : null };
+export type AppointmentType = { 'hospital' : null } |
+  { 'chamber' : null };
 export interface AuditEntry {
   'id' : bigint,
   'changedByName' : string,
@@ -222,6 +246,22 @@ export interface Prescription {
   'notes' : [] | [string],
   'visitId' : [] | [bigint],
 }
+export type QueueStatus = { 'serving' : null } |
+  { 'skipped' : null } |
+  { 'done' : null } |
+  { 'waiting' : null };
+export interface SerialQueueEntry {
+  'id' : string,
+  'status' : QueueStatus,
+  'date' : string,
+  'createdAt' : bigint,
+  'registerNumber' : [] | [string],
+  'calledAt' : [] | [bigint],
+  'serialNumber' : bigint,
+  'patientName' : string,
+  'phone' : [] | [string],
+  'doctorEmail' : string,
+}
 export type StaffRole = { 'patient' : null } |
   { 'admin' : null } |
   { 'doctor' : null } |
@@ -293,6 +333,41 @@ export interface _SERVICE {
   >,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'assignConsultant' : ActorMethod<[bigint, string, string], Patient>,
+  'bulkUpsertAppointments' : ActorMethod<
+    [Array<Appointment>],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
+  'bulkUpsertQueueEntries' : ActorMethod<
+    [Array<SerialQueueEntry>],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
+  'clearQueueByDate' : ActorMethod<
+    [string, string],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
+  'createAppointment' : ActorMethod<
+    [
+      string,
+      [] | [bigint],
+      string,
+      [] | [string],
+      [] | [string],
+      AppointmentType,
+      [] | [string],
+      [] | [string],
+      string,
+      [] | [string],
+      AppointmentStatus,
+      string,
+      [] | [bigint],
+      [] | [string],
+    ],
+    { 'ok' : Appointment } |
+      { 'err' : string }
+  >,
   'createBedRecord' : ActorMethod<
     [string, string],
     { 'ok' : BedRecord } |
@@ -379,6 +454,21 @@ export interface _SERVICE {
     ],
     Prescription
   >,
+  'createQueueEntry' : ActorMethod<
+    [
+      string,
+      string,
+      bigint,
+      string,
+      [] | [string],
+      [] | [string],
+      QueueStatus,
+      [] | [bigint],
+      string,
+    ],
+    { 'ok' : SerialQueueEntry } |
+      { 'err' : string }
+  >,
   'createVisit' : ActorMethod<
     [
       bigint,
@@ -393,8 +483,18 @@ export interface _SERVICE {
     ],
     Visit
   >,
+  'deleteAppointment' : ActorMethod<
+    [string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'deletePatient' : ActorMethod<[bigint], undefined>,
   'deletePrescription' : ActorMethod<[bigint], undefined>,
+  'deleteQueueEntry' : ActorMethod<
+    [string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'deleteVisit' : ActorMethod<[bigint], undefined>,
   'dischargeBed' : ActorMethod<
     [bigint],
@@ -403,6 +503,11 @@ export interface _SERVICE {
   >,
   'getActiveOrdersByPatient' : ActorMethod<[bigint], Array<ClinicalOrder>>,
   'getAlertsByPatient' : ActorMethod<[bigint], Array<ClinicalAlert>>,
+  'getAllAppointmentsByDoctor' : ActorMethod<
+    [string],
+    { 'ok' : Array<Appointment> } |
+      { 'err' : string }
+  >,
   'getAllAuditEntries' : ActorMethod<[bigint, bigint], Array<AuditEntry>>,
   'getAllBeds' : ActorMethod<[], Array<BedRecord>>,
   'getAllDiagnosisTemplates' : ActorMethod<[], Array<DiagnosisTemplate>>,
@@ -410,6 +515,21 @@ export interface _SERVICE {
   'getAllPatients' : ActorMethod<[], Array<Patient>>,
   'getAllPrescriptions' : ActorMethod<[], Array<Prescription>>,
   'getAllVisits' : ActorMethod<[], Array<Visit>>,
+  'getAppointmentById' : ActorMethod<
+    [string],
+    { 'ok' : [] | [Appointment] } |
+      { 'err' : string }
+  >,
+  'getAppointmentsByDoctor' : ActorMethod<
+    [string, string],
+    { 'ok' : Array<Appointment> } |
+      { 'err' : string }
+  >,
+  'getAppointmentsSince' : ActorMethod<
+    [string, bigint],
+    { 'ok' : Array<Appointment> } |
+      { 'err' : string }
+  >,
   'getAuditTrail' : ActorMethod<[bigint, bigint, bigint], Array<AuditEntry>>,
   'getAvailableBeds' : ActorMethod<[], Array<BedRecord>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
@@ -434,6 +554,16 @@ export interface _SERVICE {
   'getPrescription' : ActorMethod<[bigint], [] | [Prescription]>,
   'getPrescriptionsByPatientId' : ActorMethod<[bigint], Array<Prescription>>,
   'getPrescriptionsByVisitId' : ActorMethod<[bigint], Array<Prescription>>,
+  'getQueueByDateAndDoctor' : ActorMethod<
+    [string, string],
+    { 'ok' : Array<SerialQueueEntry> } |
+      { 'err' : string }
+  >,
+  'getQueueEntriesSince' : ActorMethod<
+    [string, bigint],
+    { 'ok' : Array<SerialQueueEntry> } |
+      { 'err' : string }
+  >,
   'getUnacknowledgedAlerts' : ActorMethod<[], Array<ClinicalAlert>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getVisit' : ActorMethod<[bigint], [] | [Visit]>,
@@ -458,6 +588,25 @@ export interface _SERVICE {
   'transferBed' : ActorMethod<
     [bigint, bigint, string],
     { 'ok' : BedRecord } |
+      { 'err' : string }
+  >,
+  'updateAppointment' : ActorMethod<
+    [
+      string,
+      [] | [bigint],
+      string,
+      [] | [string],
+      [] | [string],
+      AppointmentType,
+      [] | [string],
+      [] | [string],
+      string,
+      [] | [string],
+      AppointmentStatus,
+      [] | [bigint],
+      [] | [string],
+    ],
+    { 'ok' : Appointment } |
       { 'err' : string }
   >,
   'updateClinicalNote' : ActorMethod<
@@ -522,6 +671,11 @@ export interface _SERVICE {
       [] | [string],
     ],
     Prescription
+  >,
+  'updateQueueEntry' : ActorMethod<
+    [string, QueueStatus, [] | [bigint]],
+    { 'ok' : SerialQueueEntry } |
+      { 'err' : string }
   >,
   'updateVisit' : ActorMethod<
     [
