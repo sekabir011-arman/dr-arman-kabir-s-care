@@ -1,4 +1,4 @@
-// Version: 3.0.0
+// Version: 1.0.0
 type AlertSeverity__963005291 = {#Critical; #Info; #Warning};
 type AlertType__122072705 =
   {
@@ -194,27 +194,6 @@ type Observation__633753642 =
     value : Text;
     versionInfo : VersionedRecord__27047174
   };
-type OldEngineState__372740612 =
-  {
-    var alertIdCounter : Nat;
-    alerts : Map__605269027<Nat, ClinicalAlert__620379123>;
-    auditEntries : Map__605269027<Nat, AuditEntry__24563336>;
-    var auditIdCounter : Nat;
-    var bedIdCounter : Nat;
-    beds : Map__605269027<Nat, BedRecord__90428469>;
-    var diagnosisTemplateIdCounter : Nat;
-    diagnosisTemplates : Map__605269027<Nat, DiagnosisTemplate__883104078>;
-    var encounterIdCounter : Nat;
-    encounters : Map__605269027<Nat, Encounter__298641220>;
-    var noteIdCounter : Nat;
-    notes : Map__605269027<Nat, ClinicalNote__118286836>;
-    var observationIdCounter : Nat;
-    observations : Map__605269027<Nat, Observation__633753642>;
-    var orderIdCounter : Nat;
-    orders : Map__605269027<Nat, ClinicalOrder__887323512>;
-    var syncRecordIdCounter : Nat;
-    syncRecords : Map__605269027<Text, SyncRecord__825211546>
-  };
 type OrderStatus__838615098 =
   {#Cancelled; #Completed; #InProgress; #Pending; #Requested};
 type OrderType__605123120 =
@@ -323,37 +302,7 @@ type VitalSigns__681997343 =
     respiratoryRate : ?Text;
     temperature : ?Text
   };
-actor ({
-  stable accessControlState :
-    {
-      var adminAssigned : Bool;
-      userRoles : Map__605269027<Principal, UserRole__587919431>
-    };
-  in clinicalEngineState : OldEngineState__372740612;
-  stable var patientIdCounter : Nat;
-  stable patients :
-    {
-      var root : Node__46230540<Nat, Patient__823362798>;
-      var size : Nat__490723111
-    };
-  stable var prescriptionIdCounter : Nat;
-  stable prescriptions :
-    {
-      var root : Node__46230540<Nat, Prescription__847157722>;
-      var size : Nat__490723111
-    };
-  stable userProfiles :
-    {
-      var root : Node__46230540<Principal, UserProfile__491224006>;
-      var size : Nat__490723111
-    };
-  stable var visitIdCounter : Nat;
-  stable visits :
-    {
-      var root : Node__46230540<Nat, Visit__635288371>;
-      var size : Nat__490723111
-    }
-}, {
+actor {
   stable accessControlState :
     {
       var adminAssigned : Bool;
@@ -405,4 +354,4 @@ actor ({
       var root : Node__46230540<Nat, Visit__635288371>;
       var size : Nat__490723111
     }
-}) ;
+};

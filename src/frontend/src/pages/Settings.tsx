@@ -36,6 +36,7 @@ import {
   Link,
   LogOut,
   MapPin,
+  MonitorPlay,
   Save,
   Settings2,
   Shield,
@@ -1384,6 +1385,178 @@ function PrescriptionHeaderSelector({ doctorEmail }: { doctorEmail: string }) {
   );
 }
 
+// ── Serial Display Video Settings ────────────────────────────────────────────
+
+/** Convert a plain YouTube or Vimeo watch URL to an embed URL. */
+function toEmbedUrl(raw: string): string {
+  const url = raw.trim();
+  // YouTube: https://www.youtube.com/watch?v=VIDEO_ID
+  const ytWatch = url.match(
+    /(?:youtube\.com\/watch\?(?:.*&)?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+  );
+  if (ytWatch) {
+    return `https://www.youtube.com/embed/${ytWatch[1]}?autoplay=1&mute=1&loop=1&controls=1&rel=0&modestbranding=1`;
+  }
+  // YouTube playlist: already an embed or videoseries URL — pass through
+  if (url.includes("youtube.com/embed")) return url;
+  // Vimeo: https://vimeo.com/VIDEO_ID
+  const vimeo = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeo) {
+    return `https://player.vimeo.com/video/${vimeo[1]}?autoplay=1&muted=1&loop=1`;
+  }
+  // Vimeo player embed — pass through
+  if (url.includes("player.vimeo.com")) return url;
+  // Direct embed or other URL — use as-is
+  return url;
+}
+
+function SerialDisplayVideoSettings({ doctorEmail }: { doctorEmail: string }) {
+  const storageKey = `serialDisplayVideoUrl_${doctorEmail}`;
+  const [inputUrl, setInputUrl] = useState("");
+  const [savedUrl, setSavedUrl] = useState<string | null>(() =>
+    localStorage.getItem(storageKey),
+  );
+  const [previewUrl, setPreviewUrl] = useState<string | null>(() => {
+    const v = localStorage.getItem(storageKey);
+    return v ? toEmbedUrl(v) : null;
+  });
+  const [showPreview, setShowPreview] = useState(false);
+
+  const handleSave = () => {
+    if (!inputUrl.trim()) {
+      toast.error("Please enter a video URL");
+      return;
+    }
+    const embed = toEmbedUrl(inputUrl.trim());
+    localStorage.setItem(storageKey, inputUrl.trim());
+    // Broadcast change to other tabs (including SerialDisplay)
+    try {
+      const bc = new BroadcastChannel("serial_display_video_sync");
+      bc.postMessage({ videoUrl: inputUrl.trim() });
+      bc.close();
+    } catch {}
+    setSavedUrl(inputUrl.trim());
+    setPreviewUrl(embed);
+    setShowPreview(true);
+    setInputUrl("");
+    toast.success("Serial display video URL saved");
+  };
+
+  const handleClear = () => {
+    localStorage.removeItem(storageKey);
+    try {
+      const bc = new BroadcastChannel("serial_display_video_sync");
+      bc.postMessage({ videoUrl: null });
+      bc.close();
+    } catch {}
+    setSavedUrl(null);
+    setPreviewUrl(null);
+    setShowPreview(false);
+    toast.success("Serial display video cleared — default playlist restored");
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <MonitorPlay className="w-4 h-4 text-blue-600" />
+          Serial Display Video
+        </CardTitle>
+        <CardDescription>
+          Set a custom health education video for the waiting room display
+          screen (
+          <code className="text-xs bg-muted px-1 rounded">/serial-display</code>
+          ). Supports YouTube, Vimeo, or any direct embed URL. Leave blank to
+          use the default playlist.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex gap-2">
+          <Input
+            placeholder="https://www.youtube.com/watch?v=... or Vimeo URL"
+            value={inputUrl}
+            onChange={(e) => setInputUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSave();
+            }}
+            className="flex-1"
+            data-ocid="settings.serial_video.input"
+          />
+          <Button
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={handleSave}
+            data-ocid="settings.serial_video.save_button"
+          >
+            <Save className="w-3.5 h-3.5" />
+            Save
+          </Button>
+        </div>
+
+        {savedUrl && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-blue-800 mb-0.5">
+                  Current video URL
+                </p>
+                <p className="text-xs text-blue-700 break-all font-mono leading-snug">
+                  {savedUrl}
+                </p>
+              </div>
+              <div className="flex gap-1.5 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1 border-blue-300 text-blue-700 hover:bg-blue-100"
+                  onClick={() => setShowPreview((v) => !v)}
+                  data-ocid="settings.serial_video.preview_toggle"
+                >
+                  <Eye className="w-3 h-3" />
+                  {showPreview ? "Hide" : "Preview"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 gap-1"
+                  onClick={handleClear}
+                  data-ocid="settings.serial_video.delete_button"
+                >
+                  <XCircle className="w-3 h-3" />
+                  Clear
+                </Button>
+              </div>
+            </div>
+
+            {showPreview && previewUrl && (
+              <div className="rounded-lg overflow-hidden border border-blue-200 aspect-video bg-black">
+                <iframe
+                  src={previewUrl}
+                  title="Video preview"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="w-full h-full border-0"
+                  loading="lazy"
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {!savedUrl && (
+          <p
+            className="text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2 border border-border"
+            data-ocid="settings.serial_video.empty_state"
+          >
+            No custom video set. The serial display will use the default health
+            education playlist.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── PATIENT PANELS ──────────────────────────────────────────────────────────────
 
 function PatientProfileView() {
@@ -1962,6 +2135,14 @@ export default function Settings() {
               Prescription
             </TabsTrigger>
             <TabsTrigger
+              value="display"
+              className="flex-1 gap-1.5 text-xs sm:text-sm"
+              data-ocid="settings.doctor.display.tab"
+            >
+              <MonitorPlay className="w-3.5 h-3.5" />
+              Display
+            </TabsTrigger>
+            <TabsTrigger
               value="notifications"
               className="flex-1 gap-1.5 text-xs sm:text-sm"
               data-ocid="settings.doctor.notifications.tab"
@@ -2096,6 +2277,11 @@ export default function Settings() {
           </TabsContent>
           <TabsContent value="rx">
             <PrescriptionHeaderSelector
+              doctorEmail={currentDoctor?.email ?? ""}
+            />
+          </TabsContent>
+          <TabsContent value="display">
+            <SerialDisplayVideoSettings
               doctorEmail={currentDoctor?.email ?? ""}
             />
           </TabsContent>

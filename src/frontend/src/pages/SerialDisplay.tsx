@@ -35,6 +35,50 @@ function todayKey(): string {
   return `clinic_serials_${new Date().toISOString().slice(0, 10)}`;
 }
 
+const DEFAULT_VIDEO_URL =
+  "https://www.youtube.com/embed/videoseries?list=PLbpi6ZahtOH6Ar_3GPy3workfN8S9-fvo&autoplay=1&mute=1&loop=1&controls=0&showinfo=0&rel=0&modestbranding=1";
+
+/** Resolve the video embed URL for the serial display.
+ *  Reads serialDisplayVideoUrl_{doctorEmail} from localStorage.
+ *  Falls back to the default playlist when nothing is saved.
+ */
+function resolveVideoUrl(): string {
+  try {
+    const email = localStorage.getItem("app_current_user_email");
+    if (email) {
+      const custom = localStorage.getItem(`serialDisplayVideoUrl_${email}`);
+      if (custom?.trim()) return toDisplayEmbedUrl(custom.trim());
+    }
+    // Also try a scan for any saved key as fallback (e.g. when display is open without login)
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith("serialDisplayVideoUrl_")) {
+        const v = localStorage.getItem(k);
+        if (v?.trim()) return toDisplayEmbedUrl(v.trim());
+      }
+    }
+  } catch {}
+  return DEFAULT_VIDEO_URL;
+}
+
+/** Convert plain YouTube/Vimeo watch URLs to embed format. */
+function toDisplayEmbedUrl(raw: string): string {
+  const url = raw.trim();
+  const ytWatch = url.match(
+    /(?:youtube\.com\/watch\?(?:.*&)?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+  );
+  if (ytWatch) {
+    return `https://www.youtube.com/embed/${ytWatch[1]}?autoplay=1&mute=1&loop=1&controls=1&rel=0&modestbranding=1`;
+  }
+  if (url.includes("youtube.com/embed")) return url;
+  const vimeo = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeo) {
+    return `https://player.vimeo.com/video/${vimeo[1]}?autoplay=1&muted=1&loop=1`;
+  }
+  if (url.includes("player.vimeo.com")) return url;
+  return url;
+}
+
 function safeParseQueue(raw: string | null): SerialEntry[] {
   if (!raw) return [];
   try {
@@ -175,6 +219,7 @@ function SerialDisplayInner() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showVideoPanel, setShowVideoPanel] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string>(() => resolveVideoUrl());
   const prevNowServingIdRef = useRef<string | null>(null);
   const lastCanisterPollRef = useRef<number>(0);
 
@@ -213,6 +258,31 @@ function SerialDisplayInner() {
       // BroadcastChannel not supported — gracefully degrade
       return undefined;
     }
+  }, []);
+
+  // Listen for video URL updates from Settings page
+  useEffect(() => {
+    try {
+      const bc = new BroadcastChannel("serial_display_video_sync");
+      bc.onmessage = (e: MessageEvent<{ videoUrl: string | null }>) => {
+        const newUrl = e.data?.videoUrl;
+        setVideoUrl(newUrl ? toDisplayEmbedUrl(newUrl) : DEFAULT_VIDEO_URL);
+      };
+      return () => bc.close();
+    } catch {
+      return undefined;
+    }
+  }, []);
+
+  // Re-read video URL on tab visibility change (cross-device: doctor saves on phone, display picks up)
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        setVideoUrl(resolveVideoUrl());
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
 
   // Primary poll: localStorage every 2s + canister every 5s
@@ -663,10 +733,11 @@ function SerialDisplayInner() {
                 </span>
               </div>
 
-              {/* Video embed — uses a general health education playlist */}
+              {/* Video embed — uses doctor's custom URL or the default health education playlist */}
               <div className="flex-1 relative bg-black">
                 <iframe
-                  src="https://www.youtube.com/embed/videoseries?list=PLbpi6ZahtOH6Ar_3GPy3workfN8S9-fvo&autoplay=1&mute=1&loop=1&controls=0&showinfo=0&rel=0&modestbranding=1"
+                  key={videoUrl}
+                  src={videoUrl}
                   title="Health Education"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
