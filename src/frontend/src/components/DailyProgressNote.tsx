@@ -29,13 +29,12 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardList,
-  Edit2,
   FlaskConical,
   Layers,
-  ListChecks,
   MessageCircle,
   Pill,
   Plus,
+  Receipt,
   RefreshCw,
   Stethoscope,
   Thermometer,
@@ -51,6 +50,7 @@ import type { StaffRole } from "../types";
 import { STAFF_ROLE_LABELS } from "../types";
 import DrainMonitor from "./DrainMonitor";
 import IOChart from "./IOChart";
+import MoneyReceipt from "./MoneyReceipt";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TrendIndicator = "↑ improving" | "↓ worsening" | "= same";
@@ -639,6 +639,10 @@ export default function DailyProgressNote({
     form: "Tab.",
   });
   const [showPlanForm, setShowPlanForm] = useState(false);
+
+  // ── Procedure receipt ─────────────────────────────────────────────────────
+  const [procedureReceiptItem, setProcedureReceiptItem] =
+    useState<PlanItem | null>(null);
 
   function addPlanItem() {
     if (!planForm.description.trim()) {
@@ -1803,6 +1807,17 @@ export default function DailyProgressNote({
                         {item.route || "—"}
                       </td>
                       <td className="px-3 py-2.5">
+                        {item.category === "procedure" && (
+                          <button
+                            type="button"
+                            onClick={() => setProcedureReceiptItem(item)}
+                            className="text-violet-500 hover:text-violet-700 mr-1"
+                            title="Generate receipt for this procedure"
+                            data-ocid="daily_note.procedure_receipt_button"
+                          >
+                            <Receipt className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         {canEdit && (
                           <button
                             type="button"
@@ -1845,6 +1860,22 @@ export default function DailyProgressNote({
           note={note}
           latestVitals={latestVitals}
           today={today}
+        />
+      )}
+
+      {/* ── Procedure Receipt Modal ── */}
+      {procedureReceiptItem && (
+        <MoneyReceipt
+          initialData={{
+            type: "procedure",
+            patientName: "Patient",
+            doctorName: authorName,
+            service: procedureReceiptItem.description,
+            amount: 0,
+            paid: false,
+            date: today,
+          }}
+          onClose={() => setProcedureReceiptItem(null)}
         />
       )}
     </div>

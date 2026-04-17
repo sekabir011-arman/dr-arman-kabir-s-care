@@ -509,6 +509,7 @@ export interface BedRecord {
   id: bigint;
   bedNumber: string;
   ward: string;
+  hospitalName: string;
   status: "Empty" | "Occupied" | "Maintenance";
   patientId?: bigint;
   patientName?: string;
@@ -603,6 +604,24 @@ export interface PrescriptionRecord {
 }
 
 // ── Drug Reminder ──────────────────────────────────────────────────────────────
+
+// ── Money Receipt ─────────────────────────────────────────────────────────────
+
+export interface MoneyReceiptData {
+  id: string;
+  receiptNumber: string;
+  type: "appointment" | "procedure";
+  patientName: string;
+  registerNumber?: string;
+  phone?: string;
+  doctorName?: string;
+  service: string;
+  amount: number;
+  paid: boolean;
+  date: string; // ISO string
+  notes?: string;
+  serialNumber?: number;
+}
 
 export interface DrugReminder {
   id: string;

@@ -6,9 +6,12 @@ import {
   ChevronLeft,
   ChevronRight,
   LayoutList,
+  Pencil,
+  Plus,
   Rows3,
+  X,
 } from "lucide-react";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 
 interface Question {
   q: string;
@@ -20,9 +23,17 @@ interface QuestionStepperProps {
   answers?: string[];
   onChange: (index: number, value: string) => void;
   numberOffset?: number;
+  /** Doctor / Admin only — enables inline editing of question text and options */
+  canEdit?: boolean;
+  /** Called when question label text is edited */
+  onEditQuestion?: (index: number, newText: string) => void;
+  /** Called when a new option badge is added */
+  onAddOption?: (index: number, option: string) => void;
+  /** Called when an option badge is deleted */
+  onDeleteOption?: (index: number, option: string) => void;
 }
 
-// Color palette for options - each option gets a distinct color based on index
+// Color palette for options
 const OPTION_PALETTE = [
   {
     base: "bg-blue-100 text-blue-800 border-blue-300",
@@ -71,10 +82,25 @@ export default function QuestionStepper({
   answers = [],
   onChange,
   numberOffset = 0,
+  canEdit = false,
+  onEditQuestion,
+  onAddOption,
+  onDeleteOption,
 }: QuestionStepperProps) {
   const [stepMode, setStepMode] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
-  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editingAnswerIdx, setEditingAnswerIdx] = useState<number | null>(null);
+
+  // Inline question label editing
+  const [editingQuestionIdx, setEditingQuestionIdx] = useState<number | null>(
+    null,
+  );
+  const [questionDraft, setQuestionDraft] = useState("");
+
+  // Per-question "add option" input state
+  const [addingOptionIdx, setAddingOptionIdx] = useState<number | null>(null);
+  const [optionDraft, setOptionDraft] = useState("");
+  const addOptionInputRef = useRef<HTMLInputElement>(null);
 
   const total = questions.length;
 
@@ -85,12 +111,43 @@ export default function QuestionStepper({
     }
   };
 
+  const startEditQuestion = (idx: number, currentText: string) => {
+    setEditingQuestionIdx(idx);
+    setQuestionDraft(currentText);
+  };
+
+  const commitEditQuestion = (idx: number) => {
+    const trimmed = questionDraft.trim();
+    if (trimmed && onEditQuestion) {
+      onEditQuestion(idx, trimmed);
+    }
+    setEditingQuestionIdx(null);
+    setQuestionDraft("");
+  };
+
+  const startAddOption = (idx: number) => {
+    setAddingOptionIdx(idx);
+    setOptionDraft("");
+    setTimeout(() => addOptionInputRef.current?.focus(), 50);
+  };
+
+  const commitAddOption = (idx: number) => {
+    const trimmed = optionDraft.trim();
+    if (trimmed && onAddOption) {
+      onAddOption(idx, trimmed);
+    }
+    setAddingOptionIdx(null);
+    setOptionDraft("");
+  };
+
   const renderQuestion = (item: Question | string, idx: number) => {
     const question = typeof item === "string" ? item : item.q;
     const options = typeof item === "object" ? item.options || [] : [];
     const answer = answers[idx] || "";
     const isAnswered = answer.trim() !== "";
-    const isEditing = editingIdx === idx;
+    const isEditingAnswer = editingAnswerIdx === idx;
+    const isEditingQuestion = editingQuestionIdx === idx;
+    const isAddingOption = addingOptionIdx === idx;
 
     return (
       <div
@@ -100,7 +157,9 @@ export default function QuestionStepper({
             ? "border-teal-300 bg-teal-50/50"
             : "border-slate-200 bg-white"
         }`}
+        data-ocid={`question_stepper.item.${numberOffset + idx + 1}`}
       >
+        {/* Question header */}
         <div className="flex items-start gap-3 p-3 sm:p-4">
           <div
             className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${
@@ -115,38 +174,133 @@ export default function QuestionStepper({
               numberOffset + idx + 1
             )}
           </div>
-          <p className="text-slate-800 font-semibold text-sm leading-relaxed pt-0.5 flex-1">
-            {question}
-          </p>
+
+          {/* Question text — inline edit for Doctor/Admin */}
+          {canEdit && isEditingQuestion ? (
+            <input
+              ref={(el) => {
+                if (el) el.focus();
+              }}
+              value={questionDraft}
+              onChange={(e) => setQuestionDraft(e.target.value)}
+              onBlur={() => commitEditQuestion(idx)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitEditQuestion(idx);
+                }
+                if (e.key === "Escape") {
+                  setEditingQuestionIdx(null);
+                  setQuestionDraft("");
+                }
+              }}
+              className="flex-1 text-slate-800 font-semibold text-sm leading-relaxed bg-amber-50 border border-amber-400 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              data-ocid={`question_stepper.input.${numberOffset + idx + 1}`}
+            />
+          ) : (
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <p className="text-slate-800 font-semibold text-sm leading-relaxed pt-0.5 flex-1">
+                {question}
+              </p>
+              {canEdit && (
+                <button
+                  type="button"
+                  title="Edit question text"
+                  onClick={() => startEditQuestion(idx, question)}
+                  className="flex-shrink-0 p-1 rounded hover:bg-amber-100 text-amber-600 hover:text-amber-800 transition-colors"
+                  data-ocid={`question_stepper.edit_button.${numberOffset + idx + 1}`}
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
-        {options.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 sm:gap-2 px-3 sm:px-4 pb-3">
+        {/* Option badges */}
+        {(options.length > 0 || canEdit) && (
+          <div className="flex flex-wrap gap-1.5 sm:gap-2 px-3 sm:px-4 pb-2">
             {options.map((option, optIdx) => {
               const colors = OPTION_PALETTE[optIdx % OPTION_PALETTE.length];
               const isSelected = answer === option;
               return (
-                <Badge
-                  key={option}
-                  variant="outline"
-                  className={`cursor-pointer text-xs sm:text-sm py-1 sm:py-1.5 px-2 sm:px-3 transition-all border font-medium min-h-[36px] flex items-center ${
-                    isSelected ? colors.active : colors.base
-                  }`}
-                  onClick={() => handleOptionClick(idx, option)}
-                >
-                  {option}
-                </Badge>
+                <div key={option} className="relative inline-flex group">
+                  <Badge
+                    variant="outline"
+                    className={`cursor-pointer text-xs sm:text-sm py-1 sm:py-1.5 px-2 sm:px-3 transition-all border font-medium min-h-[36px] flex items-center gap-1 ${
+                      isSelected ? colors.active : colors.base
+                    } ${canEdit ? "pr-1" : ""}`}
+                    onClick={() => handleOptionClick(idx, option)}
+                    data-ocid={`question_stepper.toggle.${numberOffset + idx + 1}`}
+                  >
+                    {option}
+                    {/* Delete option — Doctor/Admin only */}
+                    {canEdit && (
+                      <button
+                        type="button"
+                        title={`Remove option "${option}"`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteOption?.(idx, option);
+                          // If this was the selected answer, clear it
+                          if (isSelected) onChange(idx, "");
+                        }}
+                        className="ml-0.5 rounded-full hover:bg-black/20 p-0.5 transition-colors"
+                        data-ocid={`question_stepper.delete_button.${numberOffset + idx + 1}`}
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    )}
+                  </Badge>
+                </div>
               );
             })}
+
+            {/* Add option — Doctor/Admin only */}
+            {canEdit &&
+              (isAddingOption ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    ref={addOptionInputRef}
+                    value={optionDraft}
+                    onChange={(e) => setOptionDraft(e.target.value)}
+                    onBlur={() => commitAddOption(idx)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitAddOption(idx);
+                      }
+                      if (e.key === "Escape") {
+                        setAddingOptionIdx(null);
+                        setOptionDraft("");
+                      }
+                    }}
+                    placeholder="Option text…"
+                    className="h-8 w-32 text-xs border border-teal-400 rounded px-2 bg-teal-50 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                    data-ocid={`question_stepper.input.option.${numberOffset + idx + 1}`}
+                  />
+                </div>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="cursor-pointer border-dashed border-teal-400 text-teal-600 hover:bg-teal-50 text-xs min-h-[36px] flex items-center gap-1 px-2"
+                  onClick={() => startAddOption(idx)}
+                  data-ocid={`question_stepper.add_button.${numberOffset + idx + 1}`}
+                >
+                  <Plus className="h-3 w-3" />
+                  Add option
+                </Badge>
+              ))}
           </div>
         )}
 
+        {/* Answer input */}
         <div className="px-3 sm:px-4 pb-3 sm:pb-4">
-          {isAnswered && !isEditing ? (
+          {isAnswered && !isEditingAnswer ? (
             <button
               type="button"
               className="flex items-center gap-2 bg-teal-100 border border-teal-300 rounded-lg px-3 py-2 cursor-pointer hover:bg-teal-200 transition-colors group w-full text-left"
-              onClick={() => setEditingIdx(idx)}
+              onClick={() => setEditingAnswerIdx(idx)}
             >
               <span className="text-teal-800 font-medium text-sm flex-1">
                 ✓ {answer}
@@ -159,8 +313,10 @@ export default function QuestionStepper({
             <Input
               value={answer}
               onChange={(e) => onChange(idx, e.target.value)}
-              onBlur={() => setEditingIdx(null)}
-              autoFocus={isEditing}
+              onBlur={() => setEditingAnswerIdx(null)}
+              ref={(el) => {
+                if (isEditingAnswer && el) el.focus();
+              }}
               placeholder={
                 options.length > 0
                   ? "Or type a custom answer..."

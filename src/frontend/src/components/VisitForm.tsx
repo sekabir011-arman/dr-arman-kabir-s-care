@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useEmailAuth } from "@/hooks/useEmailAuth";
 import { getDoctorEmail, loadFromStorage } from "@/hooks/useQueries";
 import {
   Activity,
@@ -620,6 +621,8 @@ interface VisitFormProps {
   };
   patientType?: string;
   visit?: Partial<VisitFormData>;
+  /** When provided, the form element will be attached to this ref so the parent page can call requestSubmit() */
+  formRef?: React.RefObject<HTMLFormElement | null>;
   onSubmit: (data: {
     patientId: bigint;
     visitDate: bigint;
@@ -664,6 +667,7 @@ export default function VisitForm({
   patient,
   patientType,
   visit,
+  formRef,
   onSubmit,
   onCancel,
   isLoading,
@@ -807,6 +811,34 @@ export default function VisitForm({
     Record<string, string>
   >({});
 
+  // Inline "add question" state per complaint card
+  const [addingQuestionFor, setAddingQuestionFor] = useState<string | null>(
+    null,
+  );
+  const [newQuestionForComplaint, setNewQuestionForComplaint] = useState<{
+    q: string;
+    options: string[];
+  }>({ q: "", options: [] });
+  const [newOptionDraftForQuestion, setNewOptionDraftForQuestion] =
+    useState("");
+
+  // Edits to base complaint question text/options made by Doctor/Admin
+  // Shape: { [complaintName]: { [questionIndex]: { q?: string; options?: string[] } } }
+  const [editedComplaintQuestions, setEditedComplaintQuestions] = useState<
+    Record<string, Record<number, { q?: string; options?: string[] }>>
+  >({});
+
+  // ─── Role / permissions ───────────────────────────────────────────────────
+
+  const { currentDoctor } = useEmailAuth();
+  const EDIT_ROLES: ReadonlyArray<string> = [
+    "admin",
+    "consultant_doctor",
+    "doctor",
+  ];
+  const canEditQuestions =
+    !currentDoctor || EDIT_ROLES.includes(currentDoctor.role);
+
   // ─── Handlers ─────────────────────────────────────────────────────────────
 
   const handleChange = (field: keyof VisitFormData, value: unknown) => {
@@ -902,8 +934,14 @@ export default function VisitForm({
 
   const getComplaintQuestions = (complaint: string) => {
     const base = allComplaints[complaint] || [];
+    const edits = editedComplaintQuestions[complaint] || {};
+    // Merge base questions with any inline edits
+    const mergedBase = base.map((q, i) => ({
+      q: edits[i]?.q ?? q.q,
+      options: edits[i]?.options ?? q.options,
+    }));
     const extra = complaintQuestions[complaint] || [];
-    return [...base, ...extra];
+    return [...mergedBase, ...extra];
   };
 
   const handleTemplateSelect = (template: string) => {
@@ -975,32 +1013,134 @@ export default function VisitForm({
     }));
   };
 
-  const handleAddQuestionToComplaint = (complaint: string) => {
-    const newQuestion = window.prompt("Enter new question:");
-    if (newQuestion?.trim()) {
-      const options = window.prompt(
-        "Enter options (comma separated, or leave empty):",
-      );
-      setComplaintQuestions((prev) => ({
+  // ─── Complaint question/option edit callbacks (Doctor/Admin only) ──────────
+
+  const handleEditComplaintQuestion = (
+    complaint: string,
+    idx: number,
+    newText: string,
+  ) => {
+    const base = allComplaints[complaint] || [];
+    if (idx < base.length) {
+      // Base question — store override in editedComplaintQuestions
+      setEditedComplaintQuestions((prev) => ({
         ...prev,
-        [complaint]: [
-          ...(prev[complaint] || []),
-          {
-            q: newQuestion.trim(),
-            options: options
-              ? options
-                  .split(",")
-                  .map((o) => o.trim())
-                  .filter((o) => o)
-              : [],
-          },
-        ],
+        [complaint]: {
+          ...(prev[complaint] || {}),
+          [idx]: { ...(prev[complaint]?.[idx] || {}), q: newText },
+        },
       }));
-      setComplaintAnswers((prev) => ({
-        ...prev,
-        [complaint]: [...(prev[complaint] || []), ""],
-      }));
+    } else {
+      // Extra question — update complaintQuestions
+      const extraIdx = idx - base.length;
+      setComplaintQuestions((prev) => {
+        const arr = [...(prev[complaint] || [])];
+        if (arr[extraIdx]) arr[extraIdx] = { ...arr[extraIdx], q: newText };
+        return { ...prev, [complaint]: arr };
+      });
     }
+  };
+
+  const handleAddComplaintOption = (
+    complaint: string,
+    idx: number,
+    option: string,
+  ) => {
+    const base = allComplaints[complaint] || [];
+    if (idx < base.length) {
+      const currentOpts =
+        editedComplaintQuestions[complaint]?.[idx]?.options ??
+        base[idx]?.options ??
+        [];
+      setEditedComplaintQuestions((prev) => ({
+        ...prev,
+        [complaint]: {
+          ...(prev[complaint] || {}),
+          [idx]: {
+            ...(prev[complaint]?.[idx] || {}),
+            options: [...currentOpts, option],
+          },
+        },
+      }));
+    } else {
+      const extraIdx = idx - base.length;
+      setComplaintQuestions((prev) => {
+        const arr = [...(prev[complaint] || [])];
+        if (arr[extraIdx]) {
+          arr[extraIdx] = {
+            ...arr[extraIdx],
+            options: [...arr[extraIdx].options, option],
+          };
+        }
+        return { ...prev, [complaint]: arr };
+      });
+    }
+  };
+
+  const handleDeleteComplaintOption = (
+    complaint: string,
+    idx: number,
+    option: string,
+  ) => {
+    const base = allComplaints[complaint] || [];
+    if (idx < base.length) {
+      const currentOpts =
+        editedComplaintQuestions[complaint]?.[idx]?.options ??
+        base[idx]?.options ??
+        [];
+      setEditedComplaintQuestions((prev) => ({
+        ...prev,
+        [complaint]: {
+          ...(prev[complaint] || {}),
+          [idx]: {
+            ...(prev[complaint]?.[idx] || {}),
+            options: currentOpts.filter((o) => o !== option),
+          },
+        },
+      }));
+    } else {
+      const extraIdx = idx - base.length;
+      setComplaintQuestions((prev) => {
+        const arr = [...(prev[complaint] || [])];
+        if (arr[extraIdx]) {
+          arr[extraIdx] = {
+            ...arr[extraIdx],
+            options: arr[extraIdx].options.filter((o) => o !== option),
+          };
+        }
+        return { ...prev, [complaint]: arr };
+      });
+    }
+  };
+
+  const commitNewQuestionForComplaint = (complaint: string) => {
+    if (!newQuestionForComplaint.q.trim()) {
+      setAddingQuestionFor(null);
+      return;
+    }
+    setComplaintQuestions((prev) => ({
+      ...prev,
+      [complaint]: [
+        ...(prev[complaint] || []),
+        {
+          q: newQuestionForComplaint.q.trim(),
+          options: newQuestionForComplaint.options,
+        },
+      ],
+    }));
+    setComplaintAnswers((prev) => ({
+      ...prev,
+      [complaint]: [...(prev[complaint] || []), ""],
+    }));
+    setAddingQuestionFor(null);
+    setNewQuestionForComplaint({ q: "", options: [] });
+    setNewOptionDraftForQuestion("");
+  };
+
+  const handleAddQuestionToComplaint = (complaint: string) => {
+    // Opens inline form — handled via addingQuestionFor state below
+    setAddingQuestionFor(complaint);
+    setNewQuestionForComplaint({ q: "", options: [] as string[] });
   };
 
   // ─── Submit ───────────────────────────────────────────────────────────────
@@ -1500,7 +1640,11 @@ export default function VisitForm({
   }[];
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 pb-28 lg:pb-8">
+    <form
+      ref={formRef}
+      onSubmit={handleSubmit}
+      className="space-y-6 pb-28 lg:pb-8"
+    >
       {/* Visit Type Toggle */}
       <div className="space-y-3">
         <Label className="text-base font-semibold">
@@ -1621,52 +1765,178 @@ export default function VisitForm({
                     <HelpCircle className="h-5 w-5" />
                     {complaint}
                   </CardTitle>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleAddQuestionToComplaint(complaint)}
-                    className="h-8 text-white hover:bg-white/20"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Question
-                  </Button>
+                  {canEditQuestions && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleAddQuestionToComplaint(complaint)}
+                      className="h-8 text-white hover:bg-white/20"
+                      data-ocid="visit_form.add_button"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Question
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
-              <CardContent className="pt-4">
+              <CardContent className="pt-4 space-y-4">
                 <QuestionStepper
                   questions={getComplaintQuestions(complaint)}
                   answers={complaintAnswers[complaint] || []}
                   onChange={(idx, value) =>
                     handleAnswerChange(complaint, idx, value)
                   }
+                  canEdit={canEditQuestions}
+                  onEditQuestion={(idx, newText) =>
+                    handleEditComplaintQuestion(complaint, idx, newText)
+                  }
+                  onAddOption={(idx, option) =>
+                    handleAddComplaintOption(complaint, idx, option)
+                  }
+                  onDeleteOption={(idx, option) =>
+                    handleDeleteComplaintOption(complaint, idx, option)
+                  }
                 />
+
+                {/* Inline add-question form (Doctor/Admin only) */}
+                {canEditQuestions && addingQuestionFor === complaint && (
+                  <div className="border border-dashed border-teal-400 rounded-xl bg-teal-50/50 p-4 space-y-3">
+                    <p className="text-sm font-semibold text-teal-800">
+                      New Question
+                    </p>
+                    <Input
+                      value={newQuestionForComplaint.q}
+                      onChange={(e) =>
+                        setNewQuestionForComplaint((prev) => ({
+                          ...prev,
+                          q: e.target.value,
+                        }))
+                      }
+                      placeholder="Question text / প্রশ্নের টেক্সট..."
+                      className="h-10 bg-white border-teal-300 focus:border-teal-500"
+                      data-ocid="visit_form.input"
+                    />
+                    {/* Options for the new question */}
+                    {newQuestionForComplaint.options.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {newQuestionForComplaint.options.map((opt) => (
+                          <Badge
+                            key={opt}
+                            variant="outline"
+                            className="text-xs bg-white border-teal-300 text-teal-700 flex items-center gap-1"
+                          >
+                            {opt}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNewQuestionForComplaint((prev) => ({
+                                  ...prev,
+                                  options: prev.options.filter(
+                                    (o) => o !== opt,
+                                  ),
+                                }))
+                              }
+                              className="ml-0.5 hover:bg-teal-100 rounded-full p-0.5"
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Input
+                        value={newOptionDraftForQuestion}
+                        onChange={(e) =>
+                          setNewOptionDraftForQuestion(e.target.value)
+                        }
+                        placeholder="Add option (Enter to add)..."
+                        className="h-9 bg-white border-teal-300 text-sm flex-1"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const trimmed = newOptionDraftForQuestion.trim();
+                            if (trimmed) {
+                              setNewQuestionForComplaint((prev) => ({
+                                ...prev,
+                                options: [...prev.options, trimmed],
+                              }));
+                              setNewOptionDraftForQuestion("");
+                            }
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 px-3 shrink-0"
+                        onClick={() => {
+                          const trimmed = newOptionDraftForQuestion.trim();
+                          if (trimmed) {
+                            setNewQuestionForComplaint((prev) => ({
+                              ...prev,
+                              options: [...prev.options, trimmed],
+                            }));
+                            setNewOptionDraftForQuestion("");
+                          }
+                        }}
+                      >
+                        + Option
+                      </Button>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="bg-teal-600 hover:bg-teal-700 h-9"
+                        onClick={() => commitNewQuestionForComplaint(complaint)}
+                        data-ocid="visit_form.confirm_button"
+                      >
+                        Save Question
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9"
+                        onClick={() => setAddingQuestionFor(null)}
+                        data-ocid="visit_form.cancel_button"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
         </div>
       )}
 
-      {/* History of Present Illness — shown for BOTH types, but for admitted it's the ONLY history section */}
-      <Card className="border-blue-200 bg-blue-50/30">
-        <CardHeader className="pb-3 bg-blue-600 rounded-t-xl">
-          <CardTitle className="text-base font-medium text-white">
-            History of Present Illness / বর্তমান রোগের ইতিহাস
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-3">
-          <Textarea
-            id="history_of_present_illness"
-            value={formData.history_of_present_illness || ""}
-            onChange={(e) =>
-              handleChange("history_of_present_illness", e.target.value)
-            }
-            placeholder="Detailed history of the current illness..."
-            rows={5}
-            className="text-sm"
-          />
-        </CardContent>
-      </Card>
+      {/* History of Present Illness — ADMITTED patients only */}
+      {visitType === "admitted" && (
+        <Card className="border-blue-200 bg-blue-50/30">
+          <CardHeader className="pb-3 bg-blue-600 rounded-t-xl">
+            <CardTitle className="text-base font-medium text-white">
+              History of Present Illness / বর্তমান রোগের ইতিহাস
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-3">
+            <Textarea
+              id="history_of_present_illness"
+              value={formData.history_of_present_illness || ""}
+              onChange={(e) =>
+                handleChange("history_of_present_illness", e.target.value)
+              }
+              placeholder="Detailed history of the current illness..."
+              rows={5}
+              className="text-sm"
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* System Review */}
       <Card className="border-slate-200">

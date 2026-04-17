@@ -41,6 +41,7 @@ import {
   MessageCircle,
   Monitor,
   Plus,
+  Receipt,
   RefreshCcw,
   Search,
   Stethoscope,
@@ -51,6 +52,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import MoneyReceipt, { ReceiptsHistoryList } from "../components/MoneyReceipt";
 import PatientForm, { type PatientFormData } from "../components/PatientForm";
 import { useEmailAuth } from "../hooks/useEmailAuth";
 import {
@@ -838,6 +840,9 @@ function ChamberAppointmentsTab() {
   const [filter, setFilter] = useState<ApptFilter>("all");
   const [lookupQuery, setLookupQuery] = useState("");
   const [lookupMsg, setLookupMsg] = useState("");
+  const [receiptTarget, setReceiptTarget] = useState<AppointmentEntry | null>(
+    null,
+  );
 
   const emptyForm = {
     name: "",
@@ -1107,6 +1112,16 @@ function ChamberAppointmentsTab() {
                     <Button
                       size="icon"
                       variant="ghost"
+                      className="h-8 w-8 text-violet-600 hover:bg-violet-50"
+                      title="Generate Receipt"
+                      onClick={() => setReceiptTarget(appt)}
+                      data-ocid={`chamber_appt.receipt_button.${idx + 1}`}
+                    >
+                      <Receipt className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
                       className="h-8 w-8 text-emerald-600 hover:bg-emerald-50"
                       title="Send WhatsApp confirmation"
                       onClick={() => sendWhatsApp(appt)}
@@ -1169,6 +1184,25 @@ function ChamberAppointmentsTab() {
             ))}
           </AnimatePresence>
         </div>
+      )}
+
+      {/* Receipt Dialog */}
+      {receiptTarget && (
+        <MoneyReceipt
+          initialData={{
+            type: "appointment",
+            patientName: receiptTarget.patientName,
+            registerNumber: receiptTarget.registerNumber,
+            phone: receiptTarget.phone,
+            doctorName: receiptTarget.doctor,
+            service: "Consultation / পরামর্শ",
+            amount: 0,
+            paid: false,
+            date: receiptTarget.date || new Date().toISOString().slice(0, 10),
+            serialNumber: receiptTarget.serialNumber,
+          }}
+          onClose={() => setReceiptTarget(null)}
+        />
       )}
 
       {/* Add/Edit Dialog */}
@@ -1354,6 +1388,9 @@ function AdmittedPatientsTab() {
   const [timePickerVal, setTimePickerVal] = useState("");
   const [lookupQuery, setLookupQuery] = useState("");
   const [lookupMsg, setLookupMsg] = useState("");
+  const [receiptTarget, setReceiptTarget] = useState<AppointmentEntry | null>(
+    null,
+  );
   const { currentDoctor } = useEmailAuth();
   const isDoctor =
     !currentDoctor ||
@@ -1710,6 +1747,16 @@ function AdmittedPatientsTab() {
                         <Button
                           size="icon"
                           variant="ghost"
+                          className="h-7 w-7 text-violet-600 hover:bg-violet-50"
+                          title="Generate Receipt"
+                          onClick={() => setReceiptTarget(appt)}
+                          data-ocid={`admitted_appt.receipt_button.${idx + 1}`}
+                        >
+                          <Receipt className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
                           className="h-7 w-7 text-emerald-600 hover:bg-emerald-50"
                           title="Send WhatsApp"
                           onClick={() => sendWhatsApp(appt)}
@@ -1876,6 +1923,28 @@ function AdmittedPatientsTab() {
             Admitted patient slots appear here automatically from visit forms
           </p>
         </div>
+      )}
+
+      {/* Admitted Receipt Dialog */}
+      {receiptTarget && (
+        <MoneyReceipt
+          initialData={{
+            type: "appointment",
+            patientName: receiptTarget.patientName,
+            registerNumber: receiptTarget.registerNumber,
+            phone: receiptTarget.phone,
+            doctorName: receiptTarget.doctor,
+            service: "Hospital Consultation / হাসপাতাল পরামর্শ",
+            amount: 0,
+            paid: false,
+            date: receiptTarget.date || new Date().toISOString().slice(0, 10),
+            serialNumber: receiptTarget.serialNumber,
+            notes: receiptTarget.hospitalName
+              ? `Hospital: ${receiptTarget.hospitalName}`
+              : undefined,
+          }}
+          onClose={() => setReceiptTarget(null)}
+        />
       )}
 
       {/* Time picker dialog (doctor-only) */}
@@ -2390,6 +2459,14 @@ export default function Appointments() {
             <Inbox className="w-4 h-4" />
             Public Requests
           </TabsTrigger>
+          <TabsTrigger
+            value="receipts"
+            className="gap-2"
+            data-ocid="appointments.receipts.tab"
+          >
+            <Receipt className="w-4 h-4" />
+            Receipts
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="serial" className="mt-0">
@@ -2406,6 +2483,10 @@ export default function Appointments() {
 
         <TabsContent value="public" className="mt-0">
           <PublicBookingRequestsTab />
+        </TabsContent>
+
+        <TabsContent value="receipts" className="mt-0">
+          <ReceiptsHistoryList />
         </TabsContent>
       </Tabs>
     </div>

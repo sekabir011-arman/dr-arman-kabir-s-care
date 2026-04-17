@@ -40,7 +40,6 @@ const baseNavigation = [
   { name: "Dashboard", href: "/Dashboard", icon: LayoutDashboard },
   { name: "Patients", href: "/Patients", icon: Users },
   { name: "Appointments", href: "/Appointments", icon: CalendarDays },
-  { name: "Settings", href: "/Settings", icon: UserCircle },
 ];
 
 const adminNavItem = {
@@ -105,6 +104,7 @@ export default function Layout({ children, currentPageName }: LayoutProps) {
     ...baseNavigation,
     ...(canWardRound ? [wardRoundNavItem] : []),
     ...(canBedManagement ? [bedManagementNavItem] : []),
+    { name: "Settings", href: "/Settings", icon: UserCircle },
     ...(isAdmin ? [adminNavItem] : []),
   ];
 

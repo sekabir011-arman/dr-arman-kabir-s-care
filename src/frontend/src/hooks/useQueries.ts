@@ -1392,12 +1392,17 @@ export function useGetAllBeds() {
 export function useCreateBedRecord() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { bedNumber: string; ward: string }) => {
+    mutationFn: async (data: {
+      bedNumber: string;
+      ward: string;
+      hospitalName?: string;
+    }) => {
       const all = getClinicalEntities<BedRecord>("beds");
       const newBed: BedRecord = {
         id: nextClinicalId(all),
         bedNumber: data.bedNumber,
         ward: data.ward,
+        hospitalName: data.hospitalName ?? "",
         status: "Empty",
         transferHistory: [],
       };

@@ -63,6 +63,7 @@ import PatientDashboard from "./pages/PatientDashboard";
 import Patients from "./pages/Patients";
 import SerialDisplay from "./pages/SerialDisplay";
 import Settings from "./pages/Settings";
+import VisitPage from "./pages/VisitPage";
 import WardRound from "./pages/WardRound";
 import { STAFF_ROLE_LABELS } from "./types";
 import type { StaffRole } from "./types";
@@ -135,6 +136,11 @@ const bedManagementRoute = createRoute({
   path: "/BedManagement",
   component: BedManagement,
 });
+const visitRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/Visit",
+  component: VisitPage,
+});
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -146,6 +152,7 @@ const routeTree = rootRoute.addChildren([
   auditLogRoute,
   wardRoundRoute,
   bedManagementRoute,
+  visitRoute,
 ]);
 const router = createRouter({ routeTree });
 

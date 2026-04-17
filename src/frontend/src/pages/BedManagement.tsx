@@ -11,17 +11,16 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import {
-  AlertCircle,
   ArrowLeftRight,
   Bed,
+  Building2,
   CheckCircle2,
   LogOut,
   Plus,
   Search,
-  Settings2,
   Users,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   loadFromAllDoctorKeys,
@@ -40,57 +39,79 @@ function seedBedsIfEmpty() {
   const seeds: BedRecord[] = [
     {
       id: 1n,
-      bedNumber: "A-01",
+      bedNumber: "G-01",
       ward: "General",
+      hospitalName: "Dhaka Medical College Hospital",
       status: "Empty",
       transferHistory: [],
     },
     {
       id: 2n,
-      bedNumber: "A-02",
+      bedNumber: "G-02",
       ward: "General",
-      status: "Empty",
+      hospitalName: "Dhaka Medical College Hospital",
+      status: "Occupied",
+      patientName: "Rahim Uddin",
+      admissionDate: BigInt(Date.now() - 86400000 * 2) * 1_000_000n,
       transferHistory: [],
     },
     {
       id: 3n,
-      bedNumber: "A-03",
-      ward: "General",
-      status: "Maintenance",
+      bedNumber: "M-01",
+      ward: "Medical",
+      hospitalName: "Dhaka Medical College Hospital",
+      status: "Empty",
       transferHistory: [],
     },
     {
       id: 4n,
-      bedNumber: "B-01",
+      bedNumber: "M-02",
       ward: "Medical",
-      status: "Empty",
+      hospitalName: "Dhaka Medical College Hospital",
+      status: "Maintenance",
       transferHistory: [],
     },
     {
       id: 5n,
-      bedNumber: "B-02",
-      ward: "Medical",
-      status: "Empty",
+      bedNumber: "ICU-01",
+      ward: "ICU",
+      hospitalName: "Dhaka Medical College Hospital",
+      status: "Occupied",
+      patientName: "Karim Hossain",
+      admissionDate: BigInt(Date.now() - 86400000) * 1_000_000n,
       transferHistory: [],
     },
     {
       id: 6n,
-      bedNumber: "ICU-01",
+      bedNumber: "ICU-02",
       ward: "ICU",
+      hospitalName: "Dhaka Medical College Hospital",
       status: "Empty",
       transferHistory: [],
     },
     {
       id: 7n,
-      bedNumber: "ICU-02",
-      ward: "ICU",
-      status: "Maintenance",
+      bedNumber: "C-01",
+      ward: "Chamber",
+      hospitalName: "Dr. Arman Kabir Chamber",
+      status: "Empty",
       transferHistory: [],
     },
     {
       id: 8n,
-      bedNumber: "C-01",
-      ward: "Surgical",
+      bedNumber: "C-02",
+      ward: "Chamber",
+      hospitalName: "Dr. Arman Kabir Chamber",
+      status: "Occupied",
+      patientName: "Sumaiya Begum",
+      admissionDate: BigInt(Date.now() - 3600000) * 1_000_000n,
+      transferHistory: [],
+    },
+    {
+      id: 9n,
+      bedNumber: "OBS-01",
+      ward: "Observation",
+      hospitalName: "Dr. Arman Kabir Chamber",
       status: "Empty",
       transferHistory: [],
     },
@@ -117,6 +138,19 @@ function formatTs(ts?: bigint) {
   return format(new Date(Number(ts / 1_000_000n)), "d MMM yyyy");
 }
 
+const WARDS = [
+  "General",
+  "Medical",
+  "Surgical",
+  "ICU",
+  "Pediatric",
+  "Gynae",
+  "Ortho",
+  "Chamber",
+  "Observation",
+  "Other",
+];
+
 export default function BedManagement() {
   seedBedsIfEmpty();
 
@@ -125,6 +159,7 @@ export default function BedManagement() {
   const createBed = useCreateBedRecord();
 
   const [searchQ, setSearchQ] = useState("");
+  const [selectedHospital, setSelectedHospital] = useState<string>("All");
   const [selectedBed, setSelectedBed] = useState<BedRecord | null>(null);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showTransferDialog, setShowTransferDialog] = useState(false);
@@ -134,30 +169,61 @@ export default function BedManagement() {
   const [transferReason, setTransferReason] = useState("");
   const [newBedNumber, setNewBedNumber] = useState("");
   const [newWard, setNewWard] = useState("General");
+  const [newHospitalName, setNewHospitalName] = useState("");
 
   const allPatients = useMemo(
     () => loadFromAllDoctorKeys<Patient>("patients"),
     [],
   );
 
+  // All distinct hospital names
+  const hospitalNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const b of beds) {
+      if (b.hospitalName) names.add(b.hospitalName);
+    }
+    return Array.from(names).sort();
+  }, [beds]);
+
+  // Filtered & searched beds
   const filteredBeds = useMemo(() => {
-    if (!searchQ) return beds;
-    const q = searchQ.toLowerCase();
-    return beds.filter(
-      (b) =>
-        b.bedNumber.toLowerCase().includes(q) ||
-        b.ward.toLowerCase().includes(q) ||
-        b.patientName?.toLowerCase().includes(q),
-    );
-  }, [beds, searchQ]);
+    let result = beds;
+    if (selectedHospital !== "All") {
+      result = result.filter((b) => b.hospitalName === selectedHospital);
+    }
+    if (searchQ.trim()) {
+      const q = searchQ.toLowerCase();
+      result = result.filter(
+        (b) =>
+          b.bedNumber.toLowerCase().includes(q) ||
+          b.ward.toLowerCase().includes(q) ||
+          (b.hospitalName ?? "").toLowerCase().includes(q) ||
+          (b.patientName ?? "").toLowerCase().includes(q),
+      );
+    }
+    return result;
+  }, [beds, selectedHospital, searchQ]);
+
+  // Group filtered beds by hospital
+  const bedsByHospital = useMemo(() => {
+    const groups: Record<string, BedRecord[]> = {};
+    for (const b of filteredBeds) {
+      const hn = b.hospitalName || "Unknown Hospital";
+      if (!groups[hn]) groups[hn] = [];
+      groups[hn].push(b);
+    }
+    return groups;
+  }, [filteredBeds]);
 
   const stats = useMemo(() => {
-    const total = beds.length;
-    const occupied = beds.filter((b) => b.status === "Occupied").length;
-    const empty = beds.filter((b) => b.status === "Empty").length;
-    const maintenance = beds.filter((b) => b.status === "Maintenance").length;
-    return { total, occupied, empty, maintenance };
-  }, [beds]);
+    const src = selectedHospital === "All" ? beds : filteredBeds;
+    return {
+      total: src.length,
+      occupied: src.filter((b) => b.status === "Occupied").length,
+      empty: src.filter((b) => b.status === "Empty").length,
+      maintenance: src.filter((b) => b.status === "Maintenance").length,
+    };
+  }, [beds, filteredBeds, selectedHospital]);
 
   const matchedPatients = useMemo(() => {
     if (!assignSearch.trim()) return allPatients.slice(0, 8);
@@ -174,7 +240,7 @@ export default function BedManagement() {
   function dischargeFromBed(bed: BedRecord) {
     const store = getClinicalStore();
     const all = (store.beds as BedRecord[] | undefined) ?? [];
-    const updated = all.map((b) =>
+    store.beds = all.map((b) =>
       b.id === bed.id
         ? {
             ...b,
@@ -184,8 +250,7 @@ export default function BedManagement() {
             dischargeDate: BigInt(Date.now()) * 1_000_000n,
           }
         : b,
-    );
-    store.beds = updated as unknown[];
+    ) as unknown[];
     saveClinicalStore(store);
     refetch();
     setSelectedBed(null);
@@ -205,8 +270,8 @@ export default function BedManagement() {
       return;
     }
     const now = BigInt(Date.now()) * 1_000_000n;
-    const updated = all.map((b) => {
-      if (b.id === fromBed.id) {
+    store.beds = all.map((b) => {
+      if (b.id === fromBed.id)
         return {
           ...b,
           status: "Empty" as BedRecord["status"],
@@ -214,8 +279,7 @@ export default function BedManagement() {
           patientName: undefined,
           dischargeDate: now,
         };
-      }
-      if (b.id === toBedId) {
+      if (b.id === toBedId)
         return {
           ...b,
           status: "Occupied" as BedRecord["status"],
@@ -232,10 +296,8 @@ export default function BedManagement() {
             },
           ],
         };
-      }
       return b;
-    });
-    store.beds = updated as unknown[];
+    }) as unknown[];
     saveClinicalStore(store);
     refetch();
     setShowTransferDialog(false);
@@ -244,20 +306,6 @@ export default function BedManagement() {
     setSelectedBed(null);
     toast.success(`Patient transferred to bed ${toBed.bedNumber}`);
   }
-
-  const wards = useMemo(
-    () => [
-      "General",
-      "Medical",
-      "Surgical",
-      "ICU",
-      "Pediatric",
-      "Gynae",
-      "Ortho",
-      "Other",
-    ],
-    [],
-  );
 
   return (
     <div
@@ -272,7 +320,7 @@ export default function BedManagement() {
             Bed Management
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Real-time bed occupancy and patient assignment
+            Real-time bed occupancy and patient assignment by hospital
           </p>
         </div>
         <Button
@@ -282,6 +330,29 @@ export default function BedManagement() {
         >
           <Plus className="w-4 h-4" /> Add Bed
         </Button>
+      </div>
+
+      {/* Hospital filter tabs */}
+      <div
+        className="flex flex-wrap gap-2"
+        data-ocid="bed_management.hospital.tab"
+      >
+        {["All", ...hospitalNames].map((hn) => (
+          <button
+            key={hn}
+            type="button"
+            onClick={() => setSelectedHospital(hn)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+              selectedHospital === hn
+                ? "bg-indigo-600 text-white border-indigo-600"
+                : "bg-card border-border text-muted-foreground hover:border-indigo-300 hover:text-indigo-700"
+            }`}
+            data-ocid={`bed_management.hospital_filter.${hn.toLowerCase().replace(/\s+/g, "_")}`}
+          >
+            {hn !== "All" && <Building2 className="w-3.5 h-3.5" />}
+            {hn}
+          </button>
+        ))}
       </div>
 
       {/* Stats bar */}
@@ -323,7 +394,7 @@ export default function BedManagement() {
       <div className="relative max-w-xs">
         <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
         <Input
-          placeholder="Search by bed, ward, patient..."
+          placeholder="Search bed, ward, patient..."
           value={searchQ}
           onChange={(e) => setSearchQ(e.target.value)}
           className="pl-9"
@@ -331,7 +402,7 @@ export default function BedManagement() {
         />
       </div>
 
-      {/* Bed Grid */}
+      {/* Beds grouped by hospital */}
       {filteredBeds.length === 0 ? (
         <div
           className="text-center py-20"
@@ -341,45 +412,72 @@ export default function BedManagement() {
           <p className="text-muted-foreground">No beds found</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-          {filteredBeds.map((bed) => (
-            <button
-              key={bed.id.toString()}
-              type="button"
-              onClick={() => setSelectedBed(bed)}
-              className={`rounded-xl border-2 p-4 text-left transition-all hover:shadow-md ${getStatusColor(bed.status)}`}
-              data-ocid={`bed_management.item.${bed.bedNumber}`}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className={`w-2 h-2 rounded-full ${getStatusDot(bed.status)}`}
-                  />
-                  <span className="font-bold text-sm">{bed.bedNumber}</span>
-                </div>
-                {bed.status === "Occupied" && (
-                  <Users className="w-3.5 h-3.5 opacity-60" />
-                )}
-              </div>
-              <p className="text-xs font-medium opacity-70 mb-1">{bed.ward}</p>
-              {bed.status === "Occupied" && bed.patientName && (
-                <p className="text-xs font-semibold truncate">
-                  {bed.patientName}
-                </p>
-              )}
-              <Badge
-                className={`text-[10px] mt-1 border-0 ${
-                  bed.status === "Empty"
-                    ? "bg-emerald-100 text-emerald-700"
-                    : bed.status === "Occupied"
-                      ? "bg-red-100 text-red-700"
-                      : "bg-amber-100 text-amber-700"
-                }`}
+        <div className="space-y-6">
+          {Object.entries(bedsByHospital).map(
+            ([hospitalName, hospitalBeds]) => (
+              <section
+                key={hospitalName}
+                data-ocid={`bed_management.hospital.${hospitalName.toLowerCase().replace(/\s+/g, "_")}`}
               >
-                {bed.status}
-              </Badge>
-            </button>
-          ))}
+                {/* Hospital section header */}
+                <div className="flex items-center gap-2 mb-3">
+                  <Building2 className="w-4 h-4 text-indigo-600" />
+                  <h2 className="font-bold text-base text-indigo-700">
+                    {hospitalName}
+                  </h2>
+                  <span className="text-xs text-muted-foreground">
+                    ({hospitalBeds.length} bed
+                    {hospitalBeds.length !== 1 ? "s" : ""})
+                  </span>
+                  <div className="flex-1 h-px bg-indigo-100 ml-1" />
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                  {hospitalBeds.map((bed) => (
+                    <button
+                      key={bed.id.toString()}
+                      type="button"
+                      onClick={() => setSelectedBed(bed)}
+                      className={`rounded-xl border-2 p-4 text-left transition-all hover:shadow-md ${getStatusColor(bed.status)}`}
+                      data-ocid={`bed_management.item.${bed.bedNumber}`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`w-2 h-2 rounded-full ${getStatusDot(bed.status)}`}
+                          />
+                          <span className="font-bold text-sm">
+                            {bed.bedNumber}
+                          </span>
+                        </div>
+                        {bed.status === "Occupied" && (
+                          <Users className="w-3.5 h-3.5 opacity-60" />
+                        )}
+                      </div>
+                      <p className="text-xs font-medium opacity-70 mb-1">
+                        {bed.ward}
+                      </p>
+                      {bed.status === "Occupied" && bed.patientName && (
+                        <p className="text-xs font-semibold truncate">
+                          {bed.patientName}
+                        </p>
+                      )}
+                      <Badge
+                        className={`text-[10px] mt-1 border-0 ${
+                          bed.status === "Empty"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : bed.status === "Occupied"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-amber-100 text-amber-700"
+                        }`}
+                      >
+                        {bed.status}
+                      </Badge>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ),
+          )}
         </div>
       )}
 
@@ -397,6 +495,16 @@ export default function BedManagement() {
           </DialogHeader>
           {selectedBed && (
             <div className="space-y-4">
+              {/* Hospital badge */}
+              {selectedBed.hospitalName && (
+                <div className="flex items-center gap-1.5 text-xs text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span className="font-medium">
+                    {selectedBed.hospitalName}
+                  </span>
+                </div>
+              )}
+
               <div
                 className={`rounded-lg border px-4 py-3 ${getStatusColor(selectedBed.status)}`}
               >
@@ -418,7 +526,6 @@ export default function BedManagement() {
                 )}
               </div>
 
-              {/* Transfer history */}
               {selectedBed.transferHistory?.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -449,15 +556,12 @@ export default function BedManagement() {
                 </div>
               )}
 
-              {/* Actions */}
               <div className="flex flex-wrap gap-2">
                 {selectedBed.status === "Empty" && (
                   <Button
                     size="sm"
                     className="gap-1.5 bg-teal-600 hover:bg-teal-700"
-                    onClick={() => {
-                      setShowAssignDialog(true);
-                    }}
+                    onClick={() => setShowAssignDialog(true)}
                     data-ocid="bed_management.assign_button"
                   >
                     <Plus className="w-3.5 h-3.5" /> Assign Patient
@@ -602,7 +706,7 @@ export default function BedManagement() {
                   )
                   .map((b) => (
                     <option key={b.id.toString()} value={b.id.toString()}>
-                      {b.bedNumber} ({b.ward})
+                      {b.bedNumber} ({b.ward}) — {b.hospitalName}
                     </option>
                   ))}
               </select>
@@ -653,6 +757,21 @@ export default function BedManagement() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
+              <Label>Hospital Name *</Label>
+              <Input
+                placeholder="e.g. Dhaka Medical College Hospital"
+                value={newHospitalName}
+                onChange={(e) => setNewHospitalName(e.target.value)}
+                list="hospital-suggestions"
+                data-ocid="bed_management.add.hospital_input"
+              />
+              <datalist id="hospital-suggestions">
+                {hospitalNames.map((hn) => (
+                  <option key={hn} value={hn} />
+                ))}
+              </datalist>
+            </div>
+            <div className="space-y-1.5">
               <Label>Bed Number *</Label>
               <Input
                 placeholder="e.g. A-01, ICU-03"
@@ -669,7 +788,7 @@ export default function BedManagement() {
                 onChange={(e) => setNewWard(e.target.value)}
                 data-ocid="bed_management.add.select"
               >
-                {wards.map((w) => (
+                {WARDS.map((w) => (
                   <option key={w} value={w}>
                     {w}
                   </option>
@@ -679,21 +798,32 @@ export default function BedManagement() {
             <div className="flex gap-2 justify-end">
               <Button
                 variant="outline"
-                onClick={() => setShowAddBedDialog(false)}
+                onClick={() => {
+                  setShowAddBedDialog(false);
+                  setNewBedNumber("");
+                  setNewWard("General");
+                  setNewHospitalName("");
+                }}
+                data-ocid="bed_management.add.cancel_button"
               >
                 Cancel
               </Button>
               <Button
-                disabled={!newBedNumber.trim()}
+                disabled={!newBedNumber.trim() || !newHospitalName.trim()}
                 onClick={() => {
                   createBed.mutate(
-                    { bedNumber: newBedNumber.trim(), ward: newWard },
+                    {
+                      bedNumber: newBedNumber.trim(),
+                      ward: newWard,
+                      hospitalName: newHospitalName.trim(),
+                    },
                     {
                       onSuccess: () => {
                         toast.success("Bed added");
                         setShowAddBedDialog(false);
                         setNewBedNumber("");
                         setNewWard("General");
+                        setNewHospitalName("");
                       },
                     },
                   );

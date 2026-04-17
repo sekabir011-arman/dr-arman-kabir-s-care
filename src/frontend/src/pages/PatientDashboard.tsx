@@ -32,7 +32,6 @@ import PatientDashboardInner from "../components/PatientDashboard";
 import PatientForm from "../components/PatientForm";
 import PrescriptionPadPreview from "../components/PrescriptionPadPreview";
 import UpgradedPrescriptionEMR from "../components/UpgradedPrescriptionEMR";
-import VisitForm from "../components/VisitForm";
 import type { PatientAccount } from "../hooks/useEmailAuth";
 import { useEmailAuth } from "../hooks/useEmailAuth";
 import {
@@ -104,7 +103,12 @@ export default function PatientDashboard({
 
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showVisitForm, setShowVisitForm] = useState(false);
+  // Visit form is a full-page route — no local modal state needed
+
+  // Navigate to full-page visit form
+  const openVisitPage = (pid: bigint) => {
+    window.location.href = `/Visit?id=${pid}`;
+  };
   const [showRxForm, setShowRxForm] = useState(false);
   const [rxInitialDiagnosis, setRxInitialDiagnosis] = useState<
     string | undefined
@@ -149,7 +153,7 @@ export default function PatientDashboard({
   const { data: prescriptions = [], isLoading: loadingRx } =
     useGetPrescriptionsByPatient(patientId ?? 0n);
   const updateMutation = useUpdatePatient();
-  const createVisitMutation = useCreateVisit();
+  const _createVisitMutation = useCreateVisit();
   const createRxMutation = useCreatePrescription();
   const deleteMutation = useDeletePatient();
   const dischargeMutation = useDischargePatient();
@@ -720,13 +724,14 @@ export default function PatientDashboard({
             loadingVisits={loadingVisits}
             loadingRx={loadingRx}
             setShowVisitForm={(v) => {
+              if (!v) return;
               if (clinicalRestricted) {
                 toast.warning(
                   "This patient must be admitted before clinical actions can be performed.",
                 );
                 return;
               }
-              setShowVisitForm(v);
+              if (patientId) openVisitPage(patientId);
             }}
             setSelectedVisit={setSelectedVisit}
             setSelectedRx={setSelectedRx}
@@ -839,27 +844,8 @@ export default function PatientDashboard({
         </Dialog>
       )}
 
-      {/* ── Visit Form Dialog ── */}
-      {showVisitForm && (
-        <Dialog open={showVisitForm} onOpenChange={setShowVisitForm}>
-          <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto p-0">
-            <VisitForm
-              patientId={patientId!}
-              onSubmit={(data) => {
-                createVisitMutation.mutate(data, {
-                  onSuccess: () => {
-                    toast.success("Visit saved");
-                    setShowVisitForm(false);
-                  },
-                  onError: () => toast.error("Failed to save visit"),
-                });
-              }}
-              onCancel={() => setShowVisitForm(false)}
-              isLoading={createVisitMutation.isPending}
-            />
-          </DialogContent>
-        </Dialog>
-      )}
+      {/* ── Visit Form: navigates to full-page /Visit route ── */}
+      {/* Dialog removed — New Visit now opens /Visit?id=<patientId> */}
 
       {/* ── Prescription EMR ── rendered directly (NOT inside Dialog) because it uses fixed inset-0 itself */}
       {showRxForm && patientId && (
