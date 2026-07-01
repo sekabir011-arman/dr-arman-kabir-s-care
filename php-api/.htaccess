@@ -1,0 +1,24 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /api/
+    
+    # Allow direct access to files
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    
+    # Route all requests to index.php
+    RewriteRule ^(.*)$ index.php?request=$1 [QSA,L]
+</IfModule>
+
+# Enable CORS
+<FilesMatch "\.(php)$">
+    Header always set Access-Control-Allow-Origin "*"
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization"
+</FilesMatch>
+
+# Deny direct access to sensitive files
+<FilesMatch "(config\.php|database-schema\.sql)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
